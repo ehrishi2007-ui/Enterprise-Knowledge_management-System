@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { 
-  LayoutDashboard, Users, FileText, Building2, MessageSquare, 
+  LayoutDashboard, Users, FileText, 
   Settings, Bot, Search, BookOpen, Bookmark, LogOut, 
   ChevronLeft, ChevronRight, GraduationCap
 } from 'lucide-react';
@@ -12,29 +12,26 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
 
   const adminLinks = [
     { name: 'Dashboard', to: '/admin/dashboard', icon: LayoutDashboard },
-    { name: 'AI Chat', to: '/employee/chat', icon: Bot },
+    { name: 'Ask AI', to: '/employee/chat', icon: Bot },
     { name: 'Search', to: '/employee/search', icon: Search },
-    { name: 'Document Management', to: '/admin/documents', icon: FileText },
-    { name: 'User Management', to: '/admin/users', icon: Users },
-    { name: 'Departments', to: '/admin/departments', icon: Building2 },
-    { name: 'Feedback & Audits', to: '/admin/feedback', icon: MessageSquare },
-    { name: 'System Settings', to: '/admin/settings', icon: Settings },
+    { name: 'Documents', to: '/admin/documents', icon: FileText },
+    { name: 'Members', to: '/admin/users', icon: Users },
+    { name: 'Settings', to: '/admin/settings', icon: Settings },
   ];
 
   const employeeLinks = [
     { name: 'Dashboard', to: '/employee/dashboard', icon: LayoutDashboard },
-    { name: 'AI Knowledge Chat', to: '/employee/chat', icon: Bot },
-    { name: 'Search Knowledge', to: '/employee/search', icon: Search },
-    { name: 'Document Repository', to: '/employee/documents', icon: BookOpen },
+    { name: 'Ask AI', to: '/employee/chat', icon: Bot },
+    { name: 'Search', to: '/employee/search', icon: Search },
+    { name: 'Documents', to: '/employee/documents', icon: BookOpen },
     { name: 'Saved Bookmarks', to: '/employee/bookmarks', icon: Bookmark },
-    { name: 'Feedback & Help', to: '/employee/feedback', icon: MessageSquare },
     { name: 'Preferences', to: '/employee/settings', icon: Settings },
   ];
 
   const links = user?.role === 'admin' ? adminLinks : employeeLinks;
 
   const content = (
-    <div className={`flex flex-col h-full bg-navy text-ice-100 border-r border-navy-800 transition-all duration-300 shadow-xl ${collapsed ? 'w-16' : 'w-64'}`}>
+    <div className={`flex flex-col h-full bg-navy text-ice-100 border-r border-navy-800 transition-all duration-300 shadow-xl ${collapsed ? 'w-16' : 'w-60'}`}>
       {/* Brand Header */}
       <div className="flex items-center h-16 shrink-0 px-4 border-b border-navy-800/80">
         <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-teal text-white font-bold shadow-md shadow-teal/20 shrink-0">
@@ -43,21 +40,15 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         {!collapsed && (
           <div className="ml-3 overflow-hidden whitespace-nowrap">
             <h1 className="text-white font-bold text-base tracking-tight flex items-center gap-1.5">
-              <span>EKMS</span>
-              <span className="text-[10px] font-semibold uppercase tracking-widest px-1.5 py-0.5 rounded bg-teal/20 text-teal-200">v2.0</span>
+              <span>Knowledge Hub</span>
             </h1>
-            <p className="text-slate2 text-xs truncate">Knowledge Management</p>
+            <p className="text-slate2 text-[11px] truncate">Document & AI Portal</p>
           </div>
         )}
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 py-4 flex flex-col gap-1.5 overflow-y-auto px-2.5">
-        {!collapsed && (
-          <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate2">
-            {user?.role === 'admin' ? 'Administration' : 'Knowledge Portal'}
-          </div>
-        )}
         {links.map((link) => {
           const Icon = link.icon;
           return (
@@ -78,7 +69,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
               }
               title={collapsed ? link.name : undefined}
             >
-              <Icon size={19} className="shrink-0 transition-transform group-hover:scale-105" />
+              <Icon size={18} className="shrink-0 transition-transform group-hover:scale-105" />
               {!collapsed && (
                 <span className="ml-3 text-sm whitespace-nowrap overflow-hidden truncate">
                   {link.name}
@@ -100,7 +91,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
               <p className="text-sm font-medium text-white truncate">{user?.display_name || 'User'}</p>
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] uppercase tracking-wider text-teal-300 font-bold bg-teal/15 px-1.5 py-0.5 rounded">
-                  {user?.role || 'employee'}
+                  {user?.role === 'admin' ? 'Admin' : 'Member'}
                 </span>
                 {user?.department && (
                   <span className="text-[10px] text-slate2 truncate">
@@ -118,7 +109,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
             title={collapsed ? "Sign Out" : undefined}
             className={`flex items-center justify-center text-slate2 hover:text-red-400 hover:bg-navy-800 p-2 rounded-lg transition-colors ${!collapsed ? 'flex-1' : ''}`}
           >
-            <LogOut size={17} />
+            <LogOut size={16} />
             {!collapsed && <span className="ml-2 text-xs font-medium">Sign Out</span>}
           </button>
           
@@ -127,7 +118,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
             aria-label="Toggle Sidebar"
             className="hidden md:flex items-center justify-center text-slate2 hover:text-white hover:bg-navy-800 p-2 rounded-lg transition-colors"
           >
-            {collapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
+            {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </button>
         </div>
       </div>
