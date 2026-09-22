@@ -2,11 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { MessageSquare, ThumbsUp, ThumbsDown, AlertTriangle, ExternalLink } from 'lucide-react';
-import { Card } from '../components/ui/Card';
-import { LoadingSpinner } from '../components/ui/LoadingSpinner';
-import { EmptyState } from '../components/ui/EmptyState';
-import { Badge } from '../components/ui/Badge';
+import { MessageSquare, ThumbsUp, ThumbsDown, AlertTriangle, ExternalLink, Bot, CheckCircle2 } from 'lucide-react';
+import { Card, Button, Badge, LoadingSpinner, EmptyState } from '../components/ui';
 
 export default function FeedbackPage() {
   const { user } = useAuth();
@@ -14,7 +11,7 @@ export default function FeedbackPage() {
   const [summary, setSummary] = useState(null);
   const [feedback, setFeedback] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [filterRating, setFilterRating] = useState('all');
 
   useEffect(() => {
     if (user?.role === 'admin') {
@@ -26,118 +23,149 @@ export default function FeedbackPage() {
             api.get('/feedback/?limit=50')
           ]);
           setSummary(summaryRes.data);
-          setFeedback(feedbackRes.data);
+          setFeedback(feedbackRes.data || []);
         } catch (err) {
-          setError('Failed to load feedback data.');
+          console.error('Failed to load feedback data', err);
         } finally {
           setLoading(false);
         }
       };
       fetchFeedbackData();
+    } else {
+      setLoading(false);
     }
   }, [user]);
 
+  // Employee View
   if (user?.role !== 'admin') {
     return (
-      <div className="min-h-screen bg-slate-900 p-8 flex items-center justify-center">
-        <Card className="max-w-md w-full p-8 text-center bg-slate-800 border-slate-700">
-          <MessageSquare className="w-12 h-12 text-orange-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-slate-50 mb-3">Provide Feedback</h2>
-          <p className="text-slate-400 mb-6 text-sm">
-            You can rate AI responses and provide feedback directly in the chat interface using the thumbs up/down buttons on each message.
+      <div className="py-12 flex items-center justify-center">
+        <Card className="max-w-md w-full p-8 text-center space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-teal/10 text-teal flex items-center justify-center mx-auto">
+            <MessageSquare size={28} />
+          </div>
+          <h2 className="text-xl font-bold text-[var(--color-text)]">Provide AI Feedback</h2>
+          <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+            You can rate any AI response as helpful or not helpful directly inside the AI Chat interface using the thumbs up and thumbs down icons.
           </p>
-          <Link 
-            to="/employee/chat" 
-            className="inline-flex items-center justify-center w-full px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors"
-          >
-            Go to Chat <ExternalLink className="w-4 h-4 ml-2" />
-          </Link>
+          <div className="pt-2">
+            <Link to="/employee/chat">
+              <Button variant="primary" className="w-full" icon={Bot}>
+                Open AI Chat
+              </Button>
+            </Link>
+          </div>
         </Card>
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="p-8 bg-slate-900 min-h-screen">
-        <Card className="p-8 text-center bg-slate-800 border-slate-700 text-red-400">
-          <AlertTriangle className="w-10 h-10 mx-auto mb-2" />
-          <p>{error}</p>
-        </Card>
-      </div>
-    );
-  }
+  const filteredFeedback = feedback.filter(item => {
+    if (filterRating === 'all') return true;
+    return item.rating === filterRating;
+  });
 
   return (
-    <div className="p-6 md:p-8 space-y-8 bg-slate-900 min-h-screen">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-50">System Feedback</h1>
+    <div className="space-y-6 pb-12">
+      <div>
+        <h1 className="text-2xl font-bold text-[var(--color-text)]">RAG Quality & Member Feedback</h1>
+        <p className="text-xs md:text-sm text-[var(--color-text-secondary)] mt-1">
+          Review community ratings on retrieved context answers and monitor hallucination flags.
+        </p>
       </div>
 
       {loading ? (
-        <div className="flex justify-center p-12"><LoadingSpinner /></div>
+        <LoadingSpinner message="Aggregating feedback reports..." />
       ) : (
         <>
           {/* Summary Cards */}
           {summary && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <Card className="p-6 bg-slate-800 border-slate-700">
-                <p className="text-slate-400 text-sm font-medium mb-1">Total Feedback</p>
-                <p className="text-3xl font-bold text-slate-50">{summary.total_feedback || 0}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="p-5">
+                <span className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase">Total Ratings</span>
+                <p className="text-3xl font-extrabold text-[var(--color-text)] mt-1">{summary.total_feedback || 0}</p>
               </Card>
-              <Card className="p-6 bg-slate-800 border-slate-700">
-                <p className="text-emerald-400 text-sm font-medium mb-1 flex items-center"><ThumbsUp className="w-4 h-4 mr-1"/> Helpful</p>
-                <p className="text-3xl font-bold text-slate-50">{summary.helpful_count || 0}</p>
+
+              <Card className="p-5">
+                <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1">
+                  <ThumbsUp size={13} /> Helpful Responses
+                </span>
+                <p className="text-3xl font-extrabold text-[var(--color-text)] mt-1">{summary.helpful_count || 0}</p>
               </Card>
-              <Card className="p-6 bg-slate-800 border-slate-700">
-                <p className="text-red-400 text-sm font-medium mb-1 flex items-center"><ThumbsDown className="w-4 h-4 mr-1"/> Not Helpful</p>
-                <p className="text-3xl font-bold text-slate-50">{summary.not_helpful_count || 0}</p>
+
+              <Card className="p-5">
+                <span className="text-[11px] font-semibold text-red-500 uppercase flex items-center gap-1">
+                  <ThumbsDown size={13} /> Needs Improvement
+                </span>
+                <p className="text-3xl font-extrabold text-[var(--color-text)] mt-1">{summary.not_helpful_count || 0}</p>
               </Card>
-              <Card className="p-6 bg-slate-800 border-slate-700">
-                <p className="text-slate-400 text-sm font-medium mb-1">Positive Ratio</p>
-                <p className="text-3xl font-bold text-slate-50">{summary.helpful_percentage || 0}%</p>
+
+              <Card className="p-5">
+                <span className="text-[11px] font-semibold text-teal uppercase">Helpful Percentage</span>
+                <p className="text-3xl font-extrabold text-teal mt-1">{summary.helpful_percentage || 0}%</p>
               </Card>
             </div>
           )}
 
-          {/* Feedback List */}
-          <Card className="bg-slate-800 border-slate-700 overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-700 bg-slate-800/50">
-              <h2 className="text-lg font-semibold text-slate-50">Recent Feedback</h2>
+          {/* Feedback Feed with Filter */}
+          <Card className="p-0 overflow-hidden">
+            <div className="p-4 border-b border-[var(--color-border)] flex flex-wrap items-center justify-between gap-3 bg-[var(--color-surface-alt)]">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--color-text)]">
+                Recent Ratings Log ({filteredFeedback.length})
+              </h2>
+
+              <div className="flex gap-1.5 text-xs">
+                {['all', 'helpful', 'not_helpful'].map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setFilterRating(mode)}
+                    className={`px-3 py-1 rounded-md capitalize font-semibold transition-all ${
+                      filterRating === mode
+                        ? 'bg-teal text-white shadow-sm'
+                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]'
+                    }`}
+                  >
+                    {mode.replace('_', ' ')}
+                  </button>
+                ))}
+              </div>
             </div>
             
-            {feedback.length > 0 ? (
-              <div className="divide-y divide-slate-700">
-                {feedback.map((item, idx) => {
-                  const isHelpful = item.rating === 'helpful' || item.rating === 1;
+            {filteredFeedback.length > 0 ? (
+              <div className="divide-y divide-[var(--color-border)]">
+                {filteredFeedback.map((item, idx) => {
+                  const isHelpful = item.rating === 'helpful';
                   return (
-                    <div key={idx} className="p-6 hover:bg-slate-750 transition-colors">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start space-x-4">
-                          <div className={`p-2 rounded-full ${isHelpful ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-                            {isHelpful ? <ThumbsUp className="w-5 h-5" /> : <ThumbsDown className="w-5 h-5" />}
-                          </div>
-                          <div>
-                            <p className="text-sm text-slate-300 mb-2">
-                              {item.comment ? `"${item.comment}"` : <span className="text-slate-500 italic">No comment provided</span>}
-                            </p>
-                            <div className="flex items-center space-x-3 text-xs text-slate-500">
-                              <span>{new Date(item.created_at || Date.now()).toLocaleDateString()}</span>
-                              {item.user_email && <span>• {item.user_email}</span>}
-                            </div>
+                    <div key={idx} className="p-4 hover:bg-[var(--color-surface-alt)] transition-colors flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className={`p-2 rounded-lg shrink-0 ${isHelpful ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                          {isHelpful ? <ThumbsUp size={16} /> : <ThumbsDown size={16} />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-[var(--color-text)] leading-relaxed">
+                            {item.comment ? `"${item.comment}"` : <span className="text-[var(--color-text-secondary)] italic">No comments provided with this rating.</span>}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1.5 text-[11px] text-[var(--color-text-secondary)]">
+                            <span>{new Date(item.created_at || Date.now()).toLocaleDateString()}</span>
+                            {item.message_id && <span>• Msg: {item.message_id.slice(0, 8)}...</span>}
                           </div>
                         </div>
-                        <Badge variant={isHelpful ? 'success' : 'danger'}>
-                          {isHelpful ? 'Helpful' : 'Needs Improvement'}
-                        </Badge>
                       </div>
+
+                      <Badge color={isHelpful ? 'green' : 'red'} size="sm">
+                        {isHelpful ? 'Helpful' : 'Needs Review'}
+                      </Badge>
                     </div>
                   );
                 })}
               </div>
             ) : (
               <div className="p-8">
-                <EmptyState title="No feedback yet" description="Feedback provided by users will appear here." icon={MessageSquare} />
+                <EmptyState 
+                  title="No feedback entries found" 
+                  description="Ratings submitted by members during chat will be logged here." 
+                  icon={MessageSquare} 
+                />
               </div>
             )}
           </Card>

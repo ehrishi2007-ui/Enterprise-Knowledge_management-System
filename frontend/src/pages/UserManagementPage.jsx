@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import api from '../lib/api';
 import { Button, Card, Badge, Modal, EmptyState, LoadingSpinner, Table } from '../components/ui';
-import { DEPARTMENTS, ROLES } from '../lib/constants';
-import { UserPlus, Edit2, Trash2, Shield, Users, CheckCircle2, XCircle } from 'lucide-react';
+import { useDepartments } from '../hooks/useDepartments';
+import { ROLES } from '../lib/constants';
+import { UserPlus, Edit2, Trash2, Shield, Users, CheckCircle2, XCircle, Search } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function UserManagementPage() {
+  const { departments, getDeptColor } = useDepartments();
+
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchFilter, setSearchFilter] = useState('');
 
   // Filters
   const [roleFilter, setRoleFilter] = useState('All');
@@ -26,16 +31,22 @@ export default function UserManagementPage() {
     password: '',
     display_name: '',
     role: 'employee',
-    department: 'Engineering'
+    department: ''
   });
   const [editForm, setEditForm] = useState({
     display_name: '',
     role: 'employee',
-    department: 'Engineering',
+    department: '',
     is_active: true
   });
   const [actionLoading, setActionLoading] = useState(false);
   const [formError, setFormError] = useState('');
+
+  useEffect(() => {
+    if (departments.length > 0 && !createForm.department) {
+      setCreateForm(prev => ({ ...prev, department: departments[0].name }));
+    }
+  }, [departments]);
 
   const fetchUsers = async () => {
     try {
@@ -50,7 +61,7 @@ export default function UserManagementPage() {
       setUsers(res.data?.users || res.data || []);
     } catch (err) {
       console.error('Failed to fetch users:', err);
-      setError('Unable to load user accounts. Please check your backend connection.');
+      setError('Unable to load user accounts.');
     } finally {
       setLoading(false);
     }
@@ -65,18 +76,24 @@ export default function UserManagementPage() {
     setActionLoading(true);
     setFormError('');
     try {
-      await api.post('/users/', createForm);
+      await api.post('/users/', {
+        ...createForm,
+        department: createForm.department || departments[0]?.name || 'General'
+      });
+      toast.success('User created successfully');
       setAddModalOpen(false);
       setCreateForm({
         email: '',
         password: '',
         display_name: '',
         role: 'employee',
-        department: 'Engineering'
+        department: departments[0]?.name || 'General'
       });
       fetchUsers();
     } catch (err) {
-      setFormError(err.response?.data?.detail || 'Failed to create user');
+      const msg = err.response?.data?.detail || 'Failed to create user account';
+      setFormError(msg);
+      toast.error(msg);
     } finally {
       setActionLoading(false);
     }
@@ -87,7 +104,7 @@ export default function UserManagementPage() {
     setEditForm({
       display_name: user.display_name || '',
       role: user.role || 'employee',
-      department: user.department || 'Engineering',
+      department: user.department || (departments[0]?.name || 'General'),
       is_active: user.is_active !== undefined ? user.is_active : true
     });
     setFormError('');
@@ -101,10 +118,13 @@ export default function UserManagementPage() {
     setFormError('');
     try {
       await api.put(`/users/${selectedUser.id}`, editForm);
+      toast.success('User updated successfully');
       setEditModalOpen(false);
       fetchUsers();
     } catch (err) {
-      setFormError(err.response?.data?.detail || 'Failed to update user profile');
+      const msg = err.response?.data?.detail || 'Failed to update user profile';
+      setFormError(msg);
+      toast.error(msg);
     } finally {
       setActionLoading(false);
     }
@@ -115,50 +135,164 @@ export default function UserManagementPage() {
     setActionLoading(true);
     try {
       await api.delete(`/users/${selectedUser.id}`);
+      toast.success('User deactivated');
       setDeleteModalOpen(false);
       fetchUsers();
     } catch (err) {
-      console.error('Failed to deactivate user:', err);
-      alert(err.response?.data?.detail || 'Failed to deactivate user account');
+      toast.error('Failed to deactivate user');
     } finally {
       setActionLoading(false);
     }
   };
 
+  const filteredUsers = users.filter(u => {
+    if (!searchFilter.trim()) return true;
+    const term = searchFilter.toLowerCase();
+    return (
+      u.display_name?.toLowerCase().includes(term) ||
+      u.email?.toLowerCase().includes(term) ||
+      u.department?.toLowerCase().includes(term)
+    );
+  });
+
+  const columns = [
+    {
+      header: 'Name',
+      accessor: 'display_name',
+      render: (u) => (
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-full bg-teal/15 text-teal font-bold flex items-center justify-center text-xs">
+            {u.display_name?.charAt(0)?.toUpperCase() || 'U'}
+          </div>
+          <span className="font-semibold text-xs text-[var(--color-text)]">
+            {u.display_name}
+          </span>
+        </div>
+      )
+    },
+    {
+      header: 'Email',
+      accessor: 'email',
+      render: (u) => (
+        <span className="text-xs font-mono text-[var(--color-text-secondary)]">
+          {u.email}
+        </span>
+      )
+    },
+    {
+      header: 'Department',
+      accessor: 'department',
+      render: (u) => (
+        u.department ? (
+          <Badge.Custom bgColor={getDeptColor(u.department)}>
+            {u.department}
+          </Badge.Custom>
+        ) : (
+          <span className="text-xs text-[var(--color-text-secondary)]">—</span>
+        )
+      )
+    },
+    {
+      header: 'Role',
+      accessor: 'role',
+      render: (u) => (
+        <Badge color={u.role === 'admin' ? 'teal' : 'gray'} size="sm">
+          {u.role === 'admin' ? 'Admin' : 'Member'}
+        </Badge>
+      )
+    },
+    {
+      header: 'Status',
+      accessor: 'is_active',
+      render: (u) => (
+        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
+          u.is_active ? 'text-emerald-500' : 'text-slate2'
+        }`}>
+          {u.is_active ? (
+            <>
+              <CheckCircle2 size={13} className="text-emerald-500" />
+              <span>Active</span>
+            </>
+          ) : (
+            <>
+              <XCircle size={13} className="text-slate2" />
+              <span>Inactive</span>
+            </>
+          )}
+        </span>
+      )
+    },
+    {
+      header: 'Actions',
+      accessor: 'actions',
+      render: (u) => (
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => handleOpenEdit(u)}
+            className="p-1.5 rounded hover:bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] hover:text-teal transition-colors"
+            title="Edit User"
+          >
+            <Edit2 size={14} />
+          </button>
+          <button
+            onClick={() => {
+              setSelectedUser(u);
+              setDeleteModalOpen(true);
+            }}
+            className="p-1.5 rounded hover:bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] hover:text-red-500 transition-colors"
+            title="Deactivate Account"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      )
+    }
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6 pb-12">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-50 flex items-center gap-3">
-            <Users className="text-orange-500" size={28} />
-            <span>User Management</span>
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Manage user accounts, roles, departments, and access permissions.
+          <h1 className="text-2xl font-bold text-[var(--color-text)]">User Directory & Permissions</h1>
+          <p className="text-xs md:text-sm text-[var(--color-text-secondary)] mt-1">
+            Provision staff, faculty, or employee accounts and assign department visibility.
           </p>
         </div>
+
         <Button 
           variant="primary" 
           icon={UserPlus} 
+          size="sm"
           onClick={() => {
             setFormError('');
             setAddModalOpen(true);
           }}
         >
-          Add User
+          Add New User
         </Button>
       </div>
 
-      {/* Filters Bar */}
-      <Card className="p-4">
-        <div className="flex flex-wrap items-center gap-4">
+      {/* Filter Toolbar */}
+      <Card className="p-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-secondary)]" />
+            <input
+              type="text"
+              placeholder="Search by name, email, or dept..."
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              className="input-field pl-9 text-xs py-1.5 rounded-lg"
+            />
+          </div>
+
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Role:</span>
+            <span className="text-xs font-semibold text-[var(--color-text-secondary)]">Role:</span>
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-orange-500"
+              className="bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg text-xs px-2.5 py-1.5 text-[var(--color-text)] focus:outline-none focus:border-teal"
             >
               <option value="All">All Roles</option>
               {ROLES.map((r) => (
@@ -168,25 +302,25 @@ export default function UserManagementPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Department:</span>
+            <span className="text-xs font-semibold text-[var(--color-text-secondary)]">Department:</span>
             <select
               value={deptFilter}
               onChange={(e) => setDeptFilter(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-orange-500"
+              className="bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg text-xs px-2.5 py-1.5 text-[var(--color-text)] focus:outline-none focus:border-teal"
             >
               <option value="All">All Departments</option>
-              {DEPARTMENTS.map((d) => (
-                <option key={d} value={d}>{d}</option>
+              {departments.map((d) => (
+                <option key={d.id || d.name} value={d.name}>{d.name}</option>
               ))}
             </select>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Status:</span>
+            <span className="text-xs font-semibold text-[var(--color-text-secondary)]">Status:</span>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-orange-500"
+              className="bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg text-xs px-2.5 py-1.5 text-[var(--color-text)] focus:outline-none focus:border-teal"
             >
               <option value="All">All Status</option>
               <option value="Active">Active</option>
@@ -198,91 +332,26 @@ export default function UserManagementPage() {
 
       {/* Users Table / States */}
       {loading ? (
-        <Card className="p-8 text-center">
-          <LoadingSpinner text="Loading user directory..." />
-        </Card>
+        <LoadingSpinner message="Loading user directory..." />
       ) : error ? (
         <Card className="p-6 text-center border-red-500/30">
-          <p className="text-red-400 text-sm mb-3">{error}</p>
+          <p className="text-red-500 text-xs mb-3">{error}</p>
           <Button variant="secondary" size="sm" onClick={fetchUsers}>Retry</Button>
         </Card>
-      ) : users.length === 0 ? (
+      ) : filteredUsers.length === 0 ? (
         <EmptyState
           icon={Users}
           title="No users found"
-          message="No user profiles match your filter criteria."
-          action={
-            <Button variant="secondary" size="sm" onClick={() => { setRoleFilter('All'); setDeptFilter('All'); setStatusFilter('All'); }}>
-              Reset Filters
-            </Button>
-          }
+          description="No user profiles match your filter criteria."
+          action={() => { setRoleFilter('All'); setDeptFilter('All'); setStatusFilter('All'); setSearchFilter(''); }}
+          actionLabel="Reset Filters"
         />
       ) : (
-        <Card className="overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-850 text-slate-400 font-semibold border-b border-slate-700">
-                <tr>
-                  <th className="p-4">Name</th>
-                  <th className="p-4">Email</th>
-                  <th className="p-4">Department</th>
-                  <th className="p-4">Role</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-700/60 text-slate-200">
-                {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-700/20 transition-colors">
-                    <td className="p-4 font-medium text-slate-100">{u.display_name}</td>
-                    <td className="p-4 text-slate-400 font-mono text-xs">{u.email}</td>
-                    <td className="p-4">{u.department || '—'}</td>
-                    <td className="p-4">
-                      <Badge variant={u.role === 'admin' ? 'accent' : 'info'}>
-                        {u.role}
-                      </Badge>
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
-                        u.is_active ? 'text-emerald-400' : 'text-slate-500'
-                      }`}>
-                        {u.is_active ? (
-                          <>
-                            <CheckCircle2 size={14} className="text-emerald-400" />
-                            <span>Active</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle size={14} className="text-slate-500" />
-                            <span>Inactive</span>
-                          </>
-                        )}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right space-x-2">
-                      <button
-                        onClick={() => handleOpenEdit(u)}
-                        className="p-1.5 text-slate-400 hover:text-orange-400 hover:bg-slate-700/50 rounded-lg transition-colors"
-                        title="Edit User"
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedUser(u);
-                          setDeleteModalOpen(true);
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700/50 rounded-lg transition-colors"
-                        title="Deactivate / Delete User"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <Card className="p-0 overflow-hidden">
+          <Table 
+            columns={columns}
+            data={filteredUsers}
+          />
         </Card>
       )}
 
@@ -291,42 +360,41 @@ export default function UserManagementPage() {
         isOpen={addModalOpen}
         onClose={() => setAddModalOpen(false)}
         title="Add New User Account"
-        icon={UserPlus}
         size="md"
       >
         <form onSubmit={handleCreateUser} className="space-y-4">
           {formError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400">
+            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-500">
               {formError}
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Display Name *</label>
+            <label className="label">Full / Display Name *</label>
             <input
               type="text"
               required
-              placeholder="e.g. Dr. Jane Doe"
+              placeholder="e.g. Dr. Jane Doe or Alex Morgan"
               value={createForm.display_name}
               onChange={(e) => setCreateForm({ ...createForm, display_name: e.target.value })}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-orange-500"
+              className="input-field text-xs py-2"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Email Address *</label>
+            <label className="label">Email Address *</label>
             <input
               type="email"
               required
-              placeholder="name@hitam.edu.in"
+              placeholder="user@organization.edu"
               value={createForm.email}
               onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-orange-500"
+              className="input-field text-xs py-2"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Initial Password *</label>
+            <label className="label">Initial Password *</label>
             <input
               type="password"
               required
@@ -334,17 +402,17 @@ export default function UserManagementPage() {
               placeholder="Minimum 6 characters"
               value={createForm.password}
               onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-orange-500"
+              className="input-field text-xs py-2"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Role *</label>
+              <label className="label">System Role *</label>
               <select
                 value={createForm.role}
                 onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-orange-500"
+                className="input-field text-xs py-2"
               >
                 {ROLES.map((r) => (
                   <option key={r} value={r} className="capitalize">{r}</option>
@@ -353,20 +421,20 @@ export default function UserManagementPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Department *</label>
+              <label className="label">Assigned Department *</label>
               <select
                 value={createForm.department}
                 onChange={(e) => setCreateForm({ ...createForm, department: e.target.value })}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-orange-500"
+                className="input-field text-xs py-2"
               >
-                {DEPARTMENTS.map((d) => (
-                  <option key={d} value={d}>{d}</option>
+                {departments.map((d) => (
+                  <option key={d.id || d.name} value={d.name}>{d.name}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-3 border-t border-slate-700">
+          <div className="flex justify-end gap-2 pt-3 border-t border-[var(--color-border)]">
             <Button variant="ghost" size="sm" type="button" onClick={() => setAddModalOpen(false)}>
               Cancel
             </Button>
@@ -382,34 +450,33 @@ export default function UserManagementPage() {
         isOpen={editModalOpen}
         onClose={() => setEditModalOpen(false)}
         title="Edit User Profile"
-        icon={Edit2}
         size="md"
       >
         <form onSubmit={handleUpdateUser} className="space-y-4">
           {formError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400">
+            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-500">
               {formError}
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Display Name *</label>
+            <label className="label">Display Name *</label>
             <input
               type="text"
               required
               value={editForm.display_name}
               onChange={(e) => setEditForm({ ...editForm, display_name: e.target.value })}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-orange-500"
+              className="input-field text-xs py-2"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Role *</label>
+              <label className="label">Role *</label>
               <select
                 value={editForm.role}
                 onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-orange-500"
+                className="input-field text-xs py-2"
               >
                 {ROLES.map((r) => (
                   <option key={r} value={r} className="capitalize">{r}</option>
@@ -418,33 +485,33 @@ export default function UserManagementPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Department *</label>
+              <label className="label">Department *</label>
               <select
                 value={editForm.department}
                 onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-orange-500"
+                className="input-field text-xs py-2"
               >
-                {DEPARTMENTS.map((d) => (
-                  <option key={d} value={d}>{d}</option>
+                {departments.map((d) => (
+                  <option key={d.id || d.name} value={d.name}>{d.name}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex items-center gap-2 pt-1">
             <input
               type="checkbox"
-              id="is_active"
+              id="is_active_edit"
               checked={editForm.is_active}
               onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })}
-              className="rounded bg-slate-900 border-slate-700 text-orange-500 focus:ring-orange-500 w-4 h-4"
+              className="rounded border-[var(--color-border)] text-teal focus:ring-teal"
             />
-            <label htmlFor="is_active" className="text-sm text-slate-200">
-              Account Active (User can authenticate and access EKMS)
+            <label htmlFor="is_active_edit" className="text-xs text-[var(--color-text)] font-medium cursor-pointer">
+              Account Active (User can authenticate and consult documents)
             </label>
           </div>
 
-          <div className="flex justify-end gap-3 pt-3 border-t border-slate-700">
+          <div className="flex justify-end gap-2 pt-3 border-t border-[var(--color-border)]">
             <Button variant="ghost" size="sm" type="button" onClick={() => setEditModalOpen(false)}>
               Cancel
             </Button>
@@ -455,22 +522,18 @@ export default function UserManagementPage() {
         </form>
       </Modal>
 
-      {/* Delete / Deactivate Confirmation Modal */}
+      {/* Deactivate Confirmation Modal */}
       <Modal
         isOpen={deleteModalOpen}
         onClose={() => setDeleteModalOpen(false)}
         title="Confirm Account Deactivation"
-        icon={Trash2}
         size="sm"
       >
         <div className="space-y-4">
-          <p className="text-sm text-slate-300">
-            Are you sure you want to deactivate <strong className="text-slate-100">{selectedUser?.display_name}</strong> ({selectedUser?.email})?
+          <p className="text-xs text-[var(--color-text-secondary)]">
+            Are you sure you want to deactivate <strong className="text-[var(--color-text)]">{selectedUser?.display_name}</strong> ({selectedUser?.email})?
           </p>
-          <p className="text-xs text-slate-400">
-            This will suspend user login rights and revoke access to internal institutional resources.
-          </p>
-          <div className="flex justify-end gap-3 pt-3 border-t border-slate-700">
+          <div className="flex justify-end gap-2 pt-3 border-t border-[var(--color-border)]">
             <Button variant="ghost" size="sm" onClick={() => setDeleteModalOpen(false)}>
               Cancel
             </Button>

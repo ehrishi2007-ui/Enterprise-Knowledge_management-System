@@ -1,5 +1,4 @@
-"""Embedding service using LangChain HuggingFaceEmbeddings (all-MiniLM-L6-v2).
-Generates 384-dimensional embeddings for text chunks and queries."""
+"""Embedding service using LangChain HuggingFaceEmbeddings (all-MiniLM-L6-v2)."""
 
 from typing import List, Optional
 import logging
@@ -19,28 +18,26 @@ class EmbeddingService:
     
     @property
     def embeddings(self) -> HuggingFaceEmbeddings:
-        """Returns the LangChain HuggingFaceEmbeddings instance (singleton)."""
         if self._embeddings is None:
-            logger.info(f"Initializing LangChain HuggingFaceEmbeddings with {self.model_name}...")
-            self._embeddings = HuggingFaceEmbeddings(
-                model_name=self.model_name,
-                encode_kwargs={"normalize_embeddings": True}
-            )
-            logger.info("LangChain HuggingFaceEmbeddings initialized successfully.")
+            logger.info(f"Initializing HuggingFaceEmbeddings with {self.model_name}...")
+            try:
+                self._embeddings = HuggingFaceEmbeddings(
+                    model_name=self.model_name,
+                    encode_kwargs={"normalize_embeddings": True}
+                )
+                logger.info("HuggingFaceEmbeddings initialized successfully.")
+            except Exception as e:
+                logger.error(f"Failed to initialize embeddings: {e}")
+                raise
         return self._embeddings
 
     def load_model(self):
-        """Warm-up model loading."""
         _ = self.embeddings
 
     def embed_text(self, text: str) -> List[float]:
-        """Generate embedding for a single text."""
         return self.embeddings.embed_query(text)
 
     def embed_batch(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings for multiple texts."""
         return self.embeddings.embed_documents(texts)
 
-# Singleton instance
 embedding_service = EmbeddingService()
-

@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
-  MessageSquare, Plus, Search, MoreVertical, Edit2, 
-  Bookmark, Trash2, Check, X, ThumbsUp, ThumbsDown, 
-  FileText, Send, Loader2 
+  Bot, Plus, Search, Edit2, Bookmark, Trash2, 
+  Check, X, ThumbsUp, ThumbsDown, FileText, Send, 
+  Loader2, Copy, Sparkles, ExternalLink, ChevronRight,
+  BookOpen, HelpCircle
 } from 'lucide-react';
 import { Button, Card, Badge, Modal, EmptyState, LoadingSpinner } from '../components/ui';
 import api from '../lib/api';
-import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
 
 export default function ChatPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   
   const initialQuery = searchParams.get('q');
   const initialConversationId = searchParams.get('conversation');
@@ -21,6 +21,7 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState([]);
   const [convLoading, setConvLoading] = useState(true);
   const [convSearch, setConvSearch] = useState('');
+  const [filterBookmarkedOnly, setFilterBookmarkedOnly] = useState(false);
   
   // Center Panel State
   const [activeConversationId, setActiveConversationId] = useState(initialConversationId || null);
@@ -29,7 +30,7 @@ export default function ChatPage() {
   const [question, setQuestion] = useState(initialQuery || '');
   const [askLoading, setAskLoading] = useState(false);
   
-  // Right Panel State
+  // Right Panel State (Source detail inspection)
   const [selectedSource, setSelectedSource] = useState(null);
 
   // Modal / Actions State
@@ -106,7 +107,7 @@ export default function ChatPage() {
         messages: [...(prev.messages || []), tempUserMsg]
       }));
     } else {
-      setActiveConversation({ id: 'temp', title: 'New Chat', messages: [tempUserMsg] });
+      setActiveConversation({ id: 'temp', title: 'New Conversation', messages: [tempUserMsg] });
     }
 
     setAskLoading(true);
@@ -127,7 +128,7 @@ export default function ChatPage() {
       }
     } catch (err) {
       console.error('Failed to ask question', err);
-      // Remove temp message on error
+      toast.error('Failed to get answer. Please try again.');
       if (activeConversation) {
         setActiveConversation(prev => ({
           ...prev,
@@ -150,14 +151,15 @@ export default function ChatPage() {
       if (activeConversation && activeConversation.id === id) {
         setActiveConversation(prev => ({ ...prev, title: editTitle.trim() }));
       }
+      toast.success('Conversation renamed');
     } catch (err) {
-      console.error('Failed to rename conversation', err);
+      toast.error('Failed to rename conversation');
     } finally {
       setEditingConvId(null);
     }
   };
 
-  const handleToggleBookmark = async (id, currentStatus) => {
+  const handleToggleBookmark = async (id) => {
     try {
       const res = await api.post(`/chat/conversations/${id}/bookmark`);
       const newStatus = res.data.is_bookmarked;
@@ -165,8 +167,9 @@ export default function ChatPage() {
       if (activeConversation && activeConversation.id === id) {
         setActiveConversation(prev => ({ ...prev, is_bookmarked: newStatus }));
       }
+      toast.success(newStatus ? 'Conversation bookmarked' : 'Bookmark removed');
     } catch (err) {
-      console.error('Failed to toggle bookmark', err);
+      toast.error('Failed to update bookmark');
     }
   };
 
@@ -180,8 +183,9 @@ export default function ChatPage() {
         setActiveConversationId(null);
         navigate('/employee/chat', { replace: true });
       }
+      toast.success('Conversation deleted');
     } catch (err) {
-      console.error('Failed to delete conversation', err);
+      toast.error('Failed to delete conversation');
     } finally {
       setDeleting(false);
       setDeleteModalOpen(false);
@@ -192,182 +196,293 @@ export default function ChatPage() {
   const handleFeedback = async (messageId, rating) => {
     try {
       await api.post('/feedback/', { message_id: messageId, rating });
-      // Update local state to show feedback given
       setActiveConversation(prev => ({
         ...prev,
         messages: prev.messages.map(m => m.id === messageId ? { ...m, user_feedback: rating } : m)
       }));
+      toast.success(rating === 'helpful' ? 'Thank you for your feedback! 👍' : 'Feedback recorded. 👎');
     } catch (err) {
-      console.error('Failed to submit feedback', err);
+      toast.error('Failed to save feedback');
     }
   };
 
-  const filteredConversations = conversations.filter(c => c.title?.toLowerCase().includes(convSearch.toLowerCase()));
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Response copied to clipboard');
+  };
+
+  const starterPrompts = [
+    'What are the institutional policies on leaves and attendance?',
+    'Summarize the lab safety regulations or equipment access steps.',
+    'What are the guidelines for project submissions or thesis evaluation?',
+    'Explain the expense reimbursement and procurement process.'
+  ];
+
+  const filteredConversations = conversations
+    .filter(c => c.title?.toLowerCase().includes(convSearch.toLowerCase()))
+    .filter(c => filterBookmarkedOnly ? c.is_bookmarked : true);
 
   return (
-    <div className="flex h-full bg-slate-900 text-slate-50 overflow-hidden">
-      {/* Left Panel - Conversations List */}
-      <div className="hidden md:flex flex-col w-72 bg-slate-800 border-r border-slate-700">
-        <div className="p-4 border-b border-slate-700 space-y-4">
+    <div className="flex h-[calc(100vh-7.5rem)] rounded-2xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] shadow-md">
+      {/* Left Panel - Conversation History */}
+      <div className="hidden md:flex flex-col w-72 lg:w-80 border-r border-[var(--color-border)] bg-[var(--color-surface-alt)]">
+        <div className="p-4 border-b border-[var(--color-border)] space-y-3">
           <Button 
-            className="w-full flex items-center justify-center gap-2"
+            className="w-full"
+            variant="primary"
+            icon={Plus}
             onClick={() => {
               setActiveConversationId(null);
               navigate('/employee/chat');
             }}
           >
-            <Plus size={16} /> New Chat
+            New Conversation
           </Button>
+
           <div className="relative">
-            <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+            <Search size={15} className="absolute left-3 top-2.5 text-[var(--color-text-secondary)]" />
             <input 
               type="text" 
-              placeholder="Search chats..." 
+              placeholder="Search chat history..." 
               value={convSearch}
               onChange={(e) => setConvSearch(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-md py-2 pl-9 pr-3 text-sm focus:outline-none focus:border-orange-500"
+              className="input-field pl-8 py-1.5 text-xs rounded-lg"
             />
           </div>
+
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+              {filterBookmarkedOnly ? 'Bookmarked Chats' : 'All Sessions'} ({filteredConversations.length})
+            </span>
+            <button
+              onClick={() => setFilterBookmarkedOnly(!filterBookmarkedOnly)}
+              className={`p-1 rounded text-xs transition-colors ${filterBookmarkedOnly ? 'text-teal font-bold' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'}`}
+              title="Filter by bookmarks"
+            >
+              <Bookmark size={14} className={filterBookmarkedOnly ? 'fill-teal' : ''} />
+            </button>
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto">
+
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {convLoading ? (
-            <div className="p-4 flex justify-center"><LoadingSpinner /></div>
+            <LoadingSpinner size="sm" message="Loading sessions..." />
           ) : filteredConversations.length === 0 ? (
-            <div className="p-4 text-center text-slate-400 text-sm">No conversations found.</div>
+            <div className="p-6 text-center text-xs text-[var(--color-text-secondary)]">
+              {convSearch ? 'No chats match your search.' : 'No conversations yet. Start a new chat!'}
+            </div>
           ) : (
-            <div className="p-2 space-y-1">
-              {filteredConversations.map(c => (
-                <div 
-                  key={c.id} 
-                  className={`group flex items-center justify-between p-3 rounded-md cursor-pointer hover:bg-slate-700 transition-colors ${activeConversationId === c.id ? 'bg-slate-700' : ''}`}
-                  onClick={() => {
-                    setActiveConversationId(c.id);
-                    navigate(`/employee/chat?conversation=${c.id}`);
-                  }}
-                >
-                  <div className="flex-1 min-w-0 mr-2">
-                    {editingConvId === c.id ? (
-                      <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                        <input 
-                          type="text" 
-                          value={editTitle}
-                          onChange={e => setEditTitle(e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-600 rounded px-1 py-0.5 text-sm"
-                          autoFocus
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') handleRenameSubmit(c.id);
-                            if (e.key === 'Escape') setEditingConvId(null);
-                          }}
-                        />
-                        <button onClick={() => handleRenameSubmit(c.id)} className="text-orange-500"><Check size={14}/></button>
-                        <button onClick={() => setEditingConvId(null)} className="text-slate-400"><X size={14}/></button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <MessageSquare size={16} className={c.is_bookmarked ? 'text-orange-500' : 'text-slate-400'} />
-                        <div className="truncate text-sm font-medium">{c.title}</div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {editingConvId !== c.id && (
-                    <div className="hidden group-hover:flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => {
-                        setEditTitle(c.title);
-                        setEditingConvId(c.id);
-                      }} className="text-slate-400 hover:text-slate-200" title="Rename">
-                        <Edit2 size={14} />
-                      </button>
-                      <button onClick={() => handleToggleBookmark(c.id, c.is_bookmarked)} className="text-slate-400 hover:text-orange-500" title="Bookmark">
-                        <Bookmark size={14} className={c.is_bookmarked ? "fill-orange-500 text-orange-500" : ""} />
-                      </button>
-                      <button onClick={() => {
-                        setConvToDelete(c);
-                        setDeleteModalOpen(true);
-                      }} className="text-slate-400 hover:text-red-500" title="Delete">
-                        <Trash2 size={14} />
-                      </button>
+            filteredConversations.map(c => (
+              <div 
+                key={c.id} 
+                onClick={() => {
+                  setActiveConversationId(c.id);
+                  navigate(`/employee/chat?conversation=${c.id}`);
+                }}
+                className={`group flex items-center justify-between p-2.5 rounded-lg cursor-pointer transition-all ${
+                  activeConversationId === c.id 
+                    ? 'bg-teal/15 text-teal border border-teal/30 font-medium' 
+                    : 'text-[var(--color-text)] hover:bg-[var(--color-surface)]'
+                }`}
+              >
+                <div className="flex-1 min-w-0 mr-2">
+                  {editingConvId === c.id ? (
+                    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                      <input 
+                        type="text" 
+                        value={editTitle}
+                        onChange={e => setEditTitle(e.target.value)}
+                        className="input-field py-0.5 px-1 text-xs"
+                        autoFocus
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleRenameSubmit(c.id);
+                          if (e.key === 'Escape') setEditingConvId(null);
+                        }}
+                      />
+                      <button onClick={() => handleRenameSubmit(c.id)} className="text-teal p-1"><Check size={13}/></button>
+                      <button onClick={() => setEditingConvId(null)} className="text-[var(--color-text-secondary)] p-1"><X size={13}/></button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Bot size={15} className={`shrink-0 ${c.is_bookmarked ? 'text-teal' : 'text-[var(--color-text-secondary)]'}`} />
+                      <span className="truncate text-xs">{c.title}</span>
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+                
+                {editingConvId !== c.id && (
+                  <div className="hidden group-hover:flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                    <button 
+                      onClick={() => { setEditTitle(c.title); setEditingConvId(c.id); }} 
+                      className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] p-1 rounded" 
+                      title="Rename"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button 
+                      onClick={() => handleToggleBookmark(c.id)} 
+                      className="text-[var(--color-text-secondary)] hover:text-teal p-1 rounded" 
+                      title="Bookmark"
+                    >
+                      <Bookmark size={12} className={c.is_bookmarked ? "fill-teal text-teal" : ""} />
+                    </button>
+                    <button 
+                      onClick={() => { setConvToDelete(c); setDeleteModalOpen(true); }} 
+                      className="text-[var(--color-text-secondary)] hover:text-red-500 p-1 rounded" 
+                      title="Delete"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
           )}
         </div>
       </div>
 
-      {/* Center Panel - Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <div className="h-16 border-b border-slate-700 flex items-center px-6">
-          <h1 className="text-lg font-semibold truncate">
-            {activeConversation ? activeConversation.title : 'New Chat'}
-          </h1>
+      {/* Center Panel - Main Chat Stream */}
+      <div className="flex-1 flex flex-col min-w-0 bg-[var(--color-surface)]">
+        {/* Chat Header */}
+        <div className="h-14 border-b border-[var(--color-border)] flex items-center justify-between px-6 bg-[var(--color-surface)]">
+          <div className="flex items-center gap-2.5 truncate">
+            <div className="p-1.5 rounded-md bg-teal/10 text-teal shrink-0">
+              <Bot size={18} />
+            </div>
+            <h2 className="text-sm font-bold text-[var(--color-text)] truncate">
+              {activeConversation ? activeConversation.title : 'New AI Session'}
+            </h2>
+          </div>
+
+          {activeConversation && (
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => handleToggleBookmark(activeConversation.id)}
+                className={`p-1.5 rounded-lg border border-[var(--color-border)] text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                  activeConversation.is_bookmarked ? 'text-teal bg-teal/10 border-teal/30' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
+                }`}
+                title="Bookmark conversation"
+              >
+                <Bookmark size={14} className={activeConversation.is_bookmarked ? 'fill-teal' : ''} />
+                <span className="hidden sm:inline">Bookmark</span>
+              </button>
+            </div>
+          )}
         </div>
         
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* Messages Stream */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-5">
           {messagesLoading ? (
-            <div className="flex justify-center h-full items-center"><LoadingSpinner size="lg" /></div>
+            <div className="flex justify-center h-full items-center">
+              <LoadingSpinner size="md" message="Retrieving conversation..." />
+            </div>
           ) : !activeConversation || !activeConversation.messages || activeConversation.messages.length === 0 ? (
-            <div className="flex h-full items-center justify-center">
-              <EmptyState 
-                icon={<MessageSquare className="w-12 h-12 text-slate-500" />}
-                title="How can I help you today?"
-                description="Ask any question about company policies, technical documents, or operational guidelines."
-              />
+            <div className="flex flex-col items-center justify-center h-full max-w-xl mx-auto text-center space-y-6">
+              <div className="w-14 h-14 rounded-2xl bg-teal/10 text-teal flex items-center justify-center shadow-md">
+                <Sparkles size={28} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-[var(--color-text)]">
+                  Ask Anything About Your Organization
+                </h3>
+                <p className="text-xs text-[var(--color-text-secondary)] mt-1.5 leading-relaxed">
+                  Answers are grounded strictly in your repository documents with exact page citations.
+                </p>
+              </div>
+
+              {/* Starter Questions Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full text-left">
+                {starterPrompts.map((prompt, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleAsk(prompt)}
+                    className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] hover:border-teal hover:shadow-sm text-xs text-[var(--color-text)] transition-all flex items-start gap-2"
+                  >
+                    <ChevronRight size={14} className="text-teal shrink-0 mt-0.5" />
+                    <span>{prompt}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
             <>
               {activeConversation.messages.map((msg, idx) => (
                 <div key={msg.id || idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {msg.role === 'user' ? (
-                    <div className="max-w-[75%] bg-orange-500 text-white rounded-2xl rounded-tr-sm px-5 py-3 shadow-sm">
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <div className="max-w-[85%] sm:max-w-[70%] bg-teal text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm text-sm">
+                      <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                     </div>
                   ) : (
-                    <div className="max-w-[85%] bg-slate-800 border border-slate-700 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
-                      <div className="prose prose-invert max-w-none text-sm whitespace-pre-wrap mb-4">
+                    <div className="max-w-[95%] sm:max-w-[85%] bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm text-[var(--color-text)]">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-5 h-5 rounded-full bg-teal text-white flex items-center justify-center text-[10px] font-bold">
+                          AI
+                        </div>
+                        <span className="text-xs font-semibold text-teal">EKMS Assistant</span>
+                        {msg.response_time_ms && (
+                          <span className="text-[10px] text-[var(--color-text-secondary)]">
+                            • ⚡ {msg.response_time_ms}ms
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-sm whitespace-pre-wrap leading-relaxed space-y-2">
                         {msg.content}
                       </div>
                       
+                      {/* Citations / Sources */}
                       {msg.sources && msg.sources.length > 0 && (
-                        <div className="mb-4 space-y-2">
-                          <p className="text-xs text-slate-400 font-medium">Sources:</p>
+                        <div className="mt-4 pt-3 border-t border-[var(--color-border)]">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] block mb-2">
+                            Verified Source Citations ({msg.sources.length}):
+                          </span>
                           <div className="flex flex-wrap gap-2">
                             {msg.sources.map((src, i) => (
                               <button
                                 key={i}
                                 onClick={() => setSelectedSource(src)}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900 border border-slate-700 hover:border-orange-500 text-xs transition-colors"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-teal text-xs text-[var(--color-text)] transition-all group"
                               >
-                                <FileText size={12} className="text-orange-500" />
-                                <span className="truncate max-w-[150px]">{src.title}</span>
-                                {src.page && <span className="text-slate-500">p.{src.page}</span>}
+                                <FileText size={12} className="text-teal group-hover:scale-110 transition-transform" />
+                                <span className="font-medium truncate max-w-[160px]">{src.title || src.document_title}</span>
+                                {src.page && (
+                                  <span className="text-[10px] px-1 rounded bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] font-semibold">
+                                    p.{src.page}
+                                  </span>
+                                )}
                               </button>
                             ))}
                           </div>
                         </div>
                       )}
                       
-                      <div className="flex items-center justify-between border-t border-slate-700 pt-3 mt-2">
-                        {msg.response_time_ms && (
-                          <span className="text-xs text-slate-500">{msg.response_time_ms}ms</span>
-                        )}
+                      {/* Response Footer: Copy & Feedback Actions */}
+                      <div className="flex items-center justify-between border-t border-[var(--color-border)] pt-2 mt-3">
+                        <button
+                          onClick={() => copyToClipboard(msg.content)}
+                          className="text-xs text-[var(--color-text-secondary)] hover:text-teal flex items-center gap-1 transition-colors"
+                          title="Copy Answer"
+                        >
+                          <Copy size={13} />
+                          <span>Copy</span>
+                        </button>
                         
                         {!msg.id?.startsWith('temp') && (
                           <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-[var(--color-text-secondary)]">Was this helpful?</span>
                             <button 
                               onClick={() => handleFeedback(msg.id, 'helpful')}
-                              className={`p-1.5 rounded hover:bg-slate-700 transition-colors ${msg.user_feedback === 'helpful' ? 'text-green-500' : 'text-slate-400'}`}
+                              className={`p-1 rounded hover:bg-[var(--color-surface)] transition-colors ${msg.user_feedback === 'helpful' ? 'text-emerald-500 font-bold' : 'text-[var(--color-text-secondary)]'}`}
                               title="Helpful"
                             >
-                              <ThumbsUp size={14} />
+                              <ThumbsUp size={13} />
                             </button>
                             <button 
                               onClick={() => handleFeedback(msg.id, 'not_helpful')}
-                              className={`p-1.5 rounded hover:bg-slate-700 transition-colors ${msg.user_feedback === 'not_helpful' ? 'text-red-500' : 'text-slate-400'}`}
+                              className={`p-1 rounded hover:bg-[var(--color-surface)] transition-colors ${msg.user_feedback === 'not_helpful' ? 'text-red-500 font-bold' : 'text-[var(--color-text-secondary)]'}`}
                               title="Not helpful"
                             >
-                              <ThumbsDown size={14} />
+                              <ThumbsDown size={13} />
                             </button>
                           </div>
                         )}
@@ -377,11 +492,14 @@ export default function ChatPage() {
                 </div>
               ))}
               
+              {/* Live retrieval animation */}
               {askLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-slate-800 border border-slate-700 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm flex items-center gap-3">
-                    <Loader2 size={16} className="animate-spin text-orange-500" />
-                    <span className="text-sm text-slate-400">Searching knowledge base...</span>
+                  <div className="bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex items-center gap-3">
+                    <Loader2 size={16} className="animate-spin text-teal" />
+                    <span className="text-xs font-medium text-[var(--color-text-secondary)]">
+                      Scanning vector embeddings & synthesizing answer...
+                    </span>
                   </div>
                 </div>
               )}
@@ -390,7 +508,8 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="p-6 pt-0">
+        {/* Query Input Box */}
+        <div className="p-4 border-t border-[var(--color-border)] bg-[var(--color-surface)]">
           <form 
             onSubmit={(e) => { e.preventDefault(); handleAsk(question); }}
             className="relative flex items-center"
@@ -399,54 +518,56 @@ export default function ChatPage() {
               type="text"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask a question..."
+              placeholder="Ask a question about documents, policies, or procedures..."
               disabled={askLoading}
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl py-4 pl-5 pr-14 shadow-sm focus:outline-none focus:border-orange-500 disabled:opacity-50 text-sm"
+              className="w-full bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-xl py-3 pl-4 pr-12 text-sm text-[var(--color-text)] focus:outline-none focus:border-teal focus:ring-2 focus:ring-teal/30 disabled:opacity-50 transition-all placeholder:text-[var(--color-text-secondary)]"
             />
             <button 
               type="submit" 
               disabled={!question.trim() || askLoading}
-              className="absolute right-3 p-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:hover:bg-orange-500 transition-colors"
+              className="absolute right-2 p-2 bg-teal text-white rounded-lg hover:bg-teal-500 disabled:opacity-40 transition-colors"
+              aria-label="Send Query"
             >
-              <Send size={18} />
+              <Send size={16} />
             </button>
           </form>
-          <div className="text-center mt-2 text-xs text-slate-500">
-            AI can make mistakes. Verify important information.
+          <div className="flex items-center justify-between mt-2 px-1 text-[11px] text-[var(--color-text-secondary)]">
+            <span>Powered by RAG & Google Gemini</span>
+            <span>Grounded on uploaded PDF/TXT sources</span>
           </div>
         </div>
       </div>
 
-      {/* Right Panel - Source Details */}
+      {/* Right Panel - Source Details Drawer */}
       {selectedSource && (
-        <div className="w-80 bg-slate-800 border-l border-slate-700 flex flex-col">
-          <div className="h-16 border-b border-slate-700 flex items-center justify-between px-4">
-            <h2 className="font-medium text-sm flex items-center gap-2">
-              <FileText size={16} className="text-orange-500" />
-              Source Details
-            </h2>
+        <div className="w-80 border-l border-[var(--color-border)] bg-[var(--color-surface-alt)] flex flex-col animate-slide-in">
+          <div className="h-14 border-b border-[var(--color-border)] flex items-center justify-between px-4">
+            <h3 className="font-semibold text-xs text-[var(--color-text)] flex items-center gap-1.5">
+              <FileText size={15} className="text-teal" />
+              <span>Citation Inspector</span>
+            </h3>
             <button 
               onClick={() => setSelectedSource(null)}
-              className="p-1 hover:bg-slate-700 rounded text-slate-400"
+              className="p-1 hover:bg-[var(--color-surface)] rounded text-[var(--color-text-secondary)]"
             >
-              <X size={16} />
+              <X size={15} />
             </button>
           </div>
-          <div className="p-4 flex-1 overflow-y-auto space-y-4">
+          <div className="p-4 flex-1 overflow-y-auto space-y-4 text-xs">
             <div>
-              <div className="text-xs text-slate-400 mb-1">Document</div>
-              <div className="font-medium text-sm">{selectedSource.title}</div>
+              <span className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase">Source Document</span>
+              <p className="font-semibold text-[var(--color-text)] mt-1">{selectedSource.title || selectedSource.document_title}</p>
             </div>
             {selectedSource.page && (
               <div>
-                <div className="text-xs text-slate-400 mb-1">Page</div>
-                <div className="text-sm">{selectedSource.page}</div>
+                <span className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase">Reference Page</span>
+                <p className="font-medium text-teal mt-0.5">Page {selectedSource.page}</p>
               </div>
             )}
             <div>
-              <div className="text-xs text-slate-400 mb-2">Matched Content</div>
-              <div className="bg-slate-900 rounded p-3 text-sm text-slate-300 font-mono text-xs whitespace-pre-wrap leading-relaxed border border-slate-700">
-                {selectedSource.snippet || "No snippet available."}
+              <span className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase">Extracted Chunk Snippet</span>
+              <div className="mt-1.5 bg-[var(--color-surface)] rounded-lg p-3 text-[11px] text-[var(--color-text)] border border-[var(--color-border)] leading-relaxed whitespace-pre-wrap font-mono">
+                {selectedSource.snippet || selectedSource.chunk_text || "No snippet text available."}
               </div>
             </div>
           </div>
@@ -460,20 +581,19 @@ export default function ChatPage() {
         title="Delete Conversation"
       >
         <div className="space-y-4">
-          <p className="text-sm text-slate-300">
-            Are you sure you want to delete the chat "{convToDelete?.title}"? This action cannot be undone.
+          <p className="text-xs text-[var(--color-text-secondary)]">
+            Are you sure you want to delete <strong className="text-[var(--color-text)]">"{convToDelete?.title}"</strong>? All associated messages will be removed permanently.
           </p>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button variant="secondary" onClick={() => setDeleteModalOpen(false)} disabled={deleting}>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" size="sm" onClick={() => setDeleteModalOpen(false)} disabled={deleting}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={confirmDelete} disabled={deleting}>
-              {deleting ? 'Deleting...' : 'Delete'}
+            <Button variant="danger" size="sm" onClick={confirmDelete} loading={deleting}>
+              Delete Chat
             </Button>
           </div>
         </div>
       </Modal>
-
     </div>
   );
 }

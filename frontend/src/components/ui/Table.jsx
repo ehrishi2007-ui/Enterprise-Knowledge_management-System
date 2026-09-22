@@ -1,37 +1,47 @@
 import React from 'react';
-import { EmptyState } from './EmptyState';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 
-export function Table({ columns, data, onRowClick, emptyMessage = "No data available", className = '' }) {
-  if (!data || data.length === 0) {
-    return <EmptyState title="No results found" message={emptyMessage} />;
-  }
-
+export default function Table({ columns, data, onRowClick, emptyMessage = 'No data found', sortable = false }) {
   return (
-    <div className={`overflow-x-auto rounded-xl border border-slate-700 ${className}`}>
-      <table className="w-full text-left text-sm whitespace-nowrap">
-        <thead className="bg-slate-800 text-slate-400 border-b border-slate-700 uppercase text-xs font-medium">
-          <tr>
-            {columns.map((col, index) => (
-              <th key={col.key || index} className="px-4 py-3">
-                {col.label}
+    <div className="overflow-x-auto rounded-xl border border-[var(--color-border)]">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-[var(--color-surface-alt)]">
+            {columns.map((col, i) => (
+              <th
+                key={i}
+                className={`px-4 py-3 text-left font-medium text-[var(--color-text-secondary)] whitespace-nowrap
+                  ${col.className || ''}`}
+                style={{ width: col.width }}
+              >
+                {col.header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-700/50">
-          {data.map((row, rowIndex) => (
-            <tr 
-              key={row.id || rowIndex} 
-              onClick={() => onRowClick && onRowClick(row)}
-              className={`bg-slate-900 transition-colors ${onRowClick ? 'cursor-pointer hover:bg-slate-800' : ''}`}
-            >
-              {columns.map((col, colIndex) => (
-                <td key={col.key || colIndex} className="px-4 py-3 text-slate-300">
-                  {col.render ? col.render(row[col.key], row) : row[col.key]}
-                </td>
-              ))}
+        <tbody className="divide-y divide-[var(--color-border)]">
+          {data.length === 0 ? (
+            <tr>
+              <td colSpan={columns.length} className="px-4 py-8 text-center text-[var(--color-text-secondary)]">
+                {emptyMessage}
+              </td>
             </tr>
-          ))}
+          ) : (
+            data.map((row, rowIdx) => (
+              <tr
+                key={row.id || rowIdx}
+                onClick={() => onRowClick?.(row)}
+                className={`bg-[var(--color-surface)] transition-colors
+                  ${onRowClick ? 'cursor-pointer hover:bg-[var(--color-surface-alt)]' : ''}`}
+              >
+                {columns.map((col, colIdx) => (
+                  <td key={colIdx} className={`px-4 py-3 ${col.cellClassName || ''}`}>
+                    {col.render ? col.render(row) : row[col.accessor]}
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>

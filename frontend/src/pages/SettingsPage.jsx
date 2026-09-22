@@ -1,20 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { Button, Card, Badge, LoadingSpinner } from '../components/ui';
-import { Settings, Sliders, User, CheckCircle2, Save } from 'lucide-react';
+import { 
+  Settings, Sliders, User, CheckCircle2, Save, 
+  Sun, Moon, Building2, Sparkles, Cpu 
+} from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const isAdmin = user?.role === 'admin';
 
   // AI settings
   const [systemPrompt, setSystemPrompt] = useState('');
   const [temperature, setTemperature] = useState(0.3);
   const [topK, setTopK] = useState(5);
+  const [maxTokens, setMaxTokens] = useState(1024);
+  const [modelName, setModelName] = useState('gemini-2.5-flash');
+
+  // Organization settings
+  const [orgName, setOrgName] = useState('Knowledge Management System');
+  const [orgType, setOrgType] = useState('Academic Institution');
+
   const [loading, setLoading] = useState(isAdmin);
   const [saving, setSaving] = useState(false);
-  const [savedSuccess, setSavedSuccess] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -30,17 +42,21 @@ export default function SettingsPage() {
       const res = await api.get('/settings/');
       const settingsList = res.data?.settings || [];
       
-      const promptObj = settingsList.find(s => s.key === 'system_prompt' || s.setting_key === 'system_prompt');
-      const tempObj = settingsList.find(s => s.key === 'temperature' || s.setting_key === 'temperature');
-      const topKObj = settingsList.find(s => s.key === 'top_k' || s.setting_key === 'top_k');
+      const getVal = (key, fallback) => {
+        const item = settingsList.find(s => s.key === key || s.setting_key === key);
+        return item?.value || item?.setting_value || fallback;
+      };
 
-      if (promptObj) setSystemPrompt(promptObj.value || promptObj.setting_value || '');
-      if (tempObj) setTemperature(parseFloat(tempObj.value || tempObj.setting_value) || 0.3);
-      if (topKObj) setTopK(parseInt(topKObj.value || topKObj.setting_value, 10) || 5);
+      setSystemPrompt(getVal('system_prompt', 'You are a helpful, professional knowledge assistant. Use the provided context documents to answer the user question with exact citations.'));
+      setTemperature(parseFloat(getVal('temperature', '0.3')));
+      setTopK(parseInt(getVal('top_k', '5'), 10));
+      setMaxTokens(parseInt(getVal('max_tokens', '1024'), 10));
+      setModelName(getVal('model_name', 'gemini-2.5-flash'));
+      setOrgName(getVal('org_name', 'Knowledge Management System'));
+      setOrgType(getVal('org_type', 'Academic Institution'));
     } catch (err) {
       console.error('Failed to load settings:', err);
-      // Sensible default if not yet seeded
-      setSystemPrompt("You are a helpful and professional enterprise knowledge assistant. Answer questions strictly based on the retrieved context documents with accurate citations.");
+      setSystemPrompt('You are an institutional knowledge assistant. Answer questions strictly based on the retrieved context documents with accurate citations.');
     } finally {
       setLoading(false);
     }
@@ -49,7 +65,6 @@ export default function SettingsPage() {
   const handleSaveSettings = async (e) => {
     e.preventDefault();
     setSaving(true);
-    setSavedSuccess(false);
     setError('');
 
     try {
@@ -57,146 +72,273 @@ export default function SettingsPage() {
         settings: {
           system_prompt: systemPrompt,
           temperature: String(temperature),
-          top_k: String(topK)
+          top_k: String(topK),
+          max_tokens: String(maxTokens),
+          model_name: modelName,
+          org_name: orgName,
+          org_type: orgType
         }
       });
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3500);
+      toast.success('System configuration saved successfully!');
     } catch (err) {
       console.error('Failed to save settings:', err);
-      setError(err.response?.data?.detail || 'Failed to update settings. Please try again.');
+      const msg = err.response?.data?.detail || 'Failed to update settings.';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto pb-12">
       <div>
-        <h1 className="text-2xl font-bold text-slate-50 flex items-center gap-3">
-          <Settings className="text-orange-500" size={28} />
-          <span>System Settings</span>
-        </h1>
-        <p className="text-sm text-slate-400 mt-1">
-          {isAdmin ? 'Configure AI RAG pipeline parameters, retrieval depth, and review your profile.' : 'View your account credentials and institutional department role.'}
+        <h1 className="text-2xl font-bold text-[var(--color-text)]">System Settings</h1>
+        <p className="text-xs md:text-sm text-[var(--color-text-secondary)] mt-1">
+          {isAdmin 
+            ? 'Configure AI RAG pipeline parameters, institution profile, and application theme.' 
+            : 'Review your account credentials and personal preferences.'}
         </p>
       </div>
 
-      {savedSuccess && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-3 text-emerald-300 text-sm animate-fade-in">
-          <CheckCircle2 size={20} className="shrink-0" />
-          <span>RAG configuration and prompt parameters updated successfully.</span>
-        </div>
-      )}
-
       {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
+        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-500 text-xs">
           {error}
         </div>
       )}
 
-      {/* Admin AI Configuration */}
+      {/* Admin AI Configuration Form */}
       {isAdmin && (
-        <Card title="AI & RAG Pipeline Configuration" subtitle="Fine-tune Gemini retrieval-augmented generation parameters" icon={Sliders}>
-          {loading ? (
-            <div className="py-6 text-center">
-              <LoadingSpinner text="Loading AI parameters..." />
-            </div>
-          ) : (
-            <form onSubmit={handleSaveSettings} className="space-y-5">
+        <form onSubmit={handleSaveSettings} className="space-y-6">
+          {/* AI Parameters */}
+          <Card>
+            <Card.Header>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-teal/10 text-teal">
+                  <Sliders size={18} />
+                </div>
+                <div>
+                  <Card.Title>AI & RAG Hyperparameters</Card.Title>
+                  <Card.Description>Fine-tune vector search retrieval and LLM synthesis</Card.Description>
+                </div>
+              </div>
+            </Card.Header>
+
+            {loading ? (
+              <LoadingSpinner size="sm" message="Loading settings..." />
+            ) : (
+              <div className="space-y-5 pt-2">
+                <div>
+                  <label className="label">System Instruction Prompt</label>
+                  <textarea
+                    rows={4}
+                    required
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    className="input-field text-xs font-mono py-2.5 resize-none leading-relaxed"
+                    placeholder="Instructions passed to LLM before context..."
+                  />
+                  <span className="text-[11px] text-[var(--color-text-secondary)] mt-1 block">
+                    Defines assistant persona and enforces citation grounding rules.
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div>
+                    <label className="label">Gemini Foundation Model</label>
+                    <select
+                      value={modelName}
+                      onChange={(e) => setModelName(e.target.value)}
+                      className="input-field text-xs py-2"
+                    >
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended: Fast & Multimodal)</option>
+                      <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                      <option value="gemini-1.5-pro">Gemini 1.5 Pro (Deep reasoning)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="label">Max Response Tokens: {maxTokens}</label>
+                    <input
+                      type="range"
+                      min="256"
+                      max="2048"
+                      step="128"
+                      value={maxTokens}
+                      onChange={(e) => setMaxTokens(parseInt(e.target.value, 10))}
+                      className="w-full accent-teal cursor-pointer mt-2"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center text-xs font-semibold mb-1">
+                      <span className="text-[var(--color-text-secondary)]">Temperature</span>
+                      <span className="text-teal font-mono">{temperature}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.0"
+                      max="1.0"
+                      step="0.05"
+                      value={temperature}
+                      onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                      className="w-full accent-teal cursor-pointer"
+                    />
+                    <span className="text-[10px] text-[var(--color-text-secondary)] mt-1 block">
+                      Lower values (0.1–0.3) enforce strict, factual citations without hallucination.
+                    </span>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center text-xs font-semibold mb-1">
+                      <span className="text-[var(--color-text-secondary)]">Top-K Retrieved Chunks</span>
+                      <span className="text-teal font-mono">{topK}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="15"
+                      step="1"
+                      value={topK}
+                      onChange={(e) => setTopK(parseInt(e.target.value, 10))}
+                      className="w-full accent-teal cursor-pointer"
+                    />
+                    <span className="text-[10px] text-[var(--color-text-secondary)] mt-1 block">
+                      Number of similarity chunks fetched from ChromaDB per query.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Organization Customization */}
+          <Card>
+            <Card.Header>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-teal/10 text-teal">
+                  <Building2 size={18} />
+                </div>
+                <div>
+                  <Card.Title>Organization Identity</Card.Title>
+                  <Card.Description>Adapt terminology for enterprise or university campuses</Card.Description>
+                </div>
+              </div>
+            </Card.Header>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  System Instruction Prompt
-                </label>
-                <textarea
-                  rows={4}
-                  required
-                  value={systemPrompt}
-                  onChange={(e) => setSystemPrompt(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-slate-100 focus:outline-none focus:border-orange-500 font-mono resize-none leading-relaxed"
-                  placeholder="Set system level instructions for the assistant..."
+                <label className="label">Organization / College Name</label>
+                <input
+                  type="text"
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
+                  className="input-field text-xs py-2"
+                  placeholder="e.g. HITAM Campus or Acme Corp"
                 />
-                <p className="text-xs text-slate-400 mt-1">
-                  Guiding rules injected into every prompt before vectorized document context.
-                </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
-                <div>
-                  <div className="flex justify-between items-center text-xs font-semibold text-slate-300 mb-2">
-                    <span>Model Temperature</span>
-                    <span className="text-orange-400 font-mono font-bold">{temperature}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.0"
-                    max="1.0"
-                    step="0.05"
-                    value={temperature}
-                    onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                    className="w-full accent-orange-500 bg-slate-900 rounded-lg cursor-pointer"
-                  />
-                  <span className="text-[11px] text-slate-400 block mt-1">
-                    Lower values (0.1–0.3) provide grounded, factual policy citations.
-                  </span>
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center text-xs font-semibold text-slate-300 mb-2">
-                    <span>Top-K Retrieved Context Chunks</span>
-                    <span className="text-orange-400 font-mono font-bold">{topK}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1"
-                    max="15"
-                    step="1"
-                    value={topK}
-                    onChange={(e) => setTopK(parseInt(e.target.value, 10))}
-                    className="w-full accent-orange-500 bg-slate-900 rounded-lg cursor-pointer"
-                  />
-                  <span className="text-[11px] text-slate-400 block mt-1">
-                    Number of vector similarity chunks retrieved from ChromaDB.
-                  </span>
-                </div>
+              <div>
+                <label className="label">Institutional Category</label>
+                <select
+                  value={orgType}
+                  onChange={(e) => setOrgType(e.target.value)}
+                  className="input-field text-xs py-2"
+                >
+                  <option value="Academic Institution">Academic Institution / College</option>
+                  <option value="Corporate Enterprise">Corporate Enterprise</option>
+                  <option value="Research Institute">Research Institute</option>
+                  <option value="Healthcare & Hospital">Healthcare & Hospital</option>
+                </select>
               </div>
+            </div>
 
-              <div className="pt-3 border-t border-slate-700 flex justify-end">
-                <Button variant="primary" size="md" type="submit" loading={saving} icon={Save}>
-                  Save AI Settings
-                </Button>
-              </div>
-            </form>
-          )}
-        </Card>
+            <div className="pt-5 border-t border-[var(--color-border)] mt-5 flex justify-end">
+              <Button 
+                variant="primary" 
+                size="md" 
+                type="submit" 
+                loading={saving} 
+                icon={Save}
+              >
+                Save All Settings
+              </Button>
+            </div>
+          </Card>
+        </form>
       )}
 
       {/* Account Profile Card */}
-      <Card title="Account Profile" subtitle="Your institutional user identity in EKMS" icon={User}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-          <div className="p-3 bg-slate-900/60 rounded-lg border border-slate-700/60">
-            <span className="text-xs text-slate-400 block mb-0.5">Full Name</span>
-            <span className="font-semibold text-slate-100">{user?.display_name || '—'}</span>
-          </div>
-
-          <div className="p-3 bg-slate-900/60 rounded-lg border border-slate-700/60">
-            <span className="text-xs text-slate-400 block mb-0.5">Email Address</span>
-            <span className="font-semibold text-slate-100 font-mono text-xs">{user?.email || '—'}</span>
-          </div>
-
-          <div className="p-3 bg-slate-900/60 rounded-lg border border-slate-700/60">
-            <span className="text-xs text-slate-400 block mb-0.5">System Role</span>
-            <div className="mt-1">
-              <Badge variant={user?.role === 'admin' ? 'accent' : 'info'}>
-                {user?.role || 'employee'}
-              </Badge>
+      <Card>
+        <Card.Header>
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-teal/10 text-teal">
+              <User size={18} />
+            </div>
+            <div>
+              <Card.Title>Account Profile</Card.Title>
+              <Card.Description>Your authenticated session details</Card.Description>
             </div>
           </div>
+        </Card.Header>
 
-          <div className="p-3 bg-slate-900/60 rounded-lg border border-slate-700/60">
-            <span className="text-xs text-slate-400 block mb-0.5">Assigned Department</span>
-            <span className="font-semibold text-slate-100">{user?.department || 'Operations'}</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-1">
+          <div className="p-3.5 bg-[var(--color-surface-alt)] rounded-xl border border-[var(--color-border)]">
+            <span className="text-[11px] text-[var(--color-text-secondary)] block mb-1">Display Name</span>
+            <span className="font-semibold text-sm text-[var(--color-text)]">{user?.display_name || '—'}</span>
           </div>
+
+          <div className="p-3.5 bg-[var(--color-surface-alt)] rounded-xl border border-[var(--color-border)]">
+            <span className="text-[11px] text-[var(--color-text-secondary)] block mb-1">Email Address</span>
+            <span className="font-mono text-xs text-[var(--color-text)]">{user?.email || '—'}</span>
+          </div>
+
+          <div className="p-3.5 bg-[var(--color-surface-alt)] rounded-xl border border-[var(--color-border)]">
+            <span className="text-[11px] text-[var(--color-text-secondary)] block mb-1.5">System Role</span>
+            <Badge color={user?.role === 'admin' ? 'teal' : 'gray'} size="sm">
+              {user?.role || 'employee'}
+            </Badge>
+          </div>
+
+          <div className="p-3.5 bg-[var(--color-surface-alt)] rounded-xl border border-[var(--color-border)]">
+            <span className="text-[11px] text-[var(--color-text-secondary)] block mb-1">Assigned Department</span>
+            <span className="font-semibold text-xs text-[var(--color-text)]">{user?.department || 'General'}</span>
+          </div>
+        </div>
+      </Card>
+
+      {/* Theme Preference Card */}
+      <Card>
+        <Card.Header>
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-teal/10 text-teal">
+              {theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}
+            </div>
+            <div>
+              <Card.Title>Interface Appearance</Card.Title>
+              <Card.Description>Toggle between Dark and Light mode</Card.Description>
+            </div>
+          </div>
+        </Card.Header>
+
+        <div className="flex items-center justify-between pt-1">
+          <div>
+            <span className="text-xs font-semibold text-[var(--color-text)] block">
+              Current Theme: <strong className="capitalize text-teal">{theme} Mode</strong>
+            </span>
+            <span className="text-[11px] text-[var(--color-text-secondary)]">
+              {theme === 'dark' ? 'Neutral dark gray background with navy sidebar.' : 'Clean crisp light background with navy sidebar.'}
+            </span>
+          </div>
+
+          <Button 
+            variant="secondary" 
+            size="sm"
+            onClick={toggleTheme}
+            icon={theme === 'dark' ? Sun : Moon}
+          >
+            Switch to {theme === 'dark' ? 'Light' : 'Dark'} Mode
+          </Button>
         </div>
       </Card>
     </div>

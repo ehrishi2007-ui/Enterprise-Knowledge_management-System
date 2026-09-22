@@ -31,6 +31,14 @@ async def upload_document(
         document_id = str(uuid.uuid4())
         file_bytes = await file.read()
         
+        # Validate file size
+        max_size = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+        if len(file_bytes) > max_size:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE_MB}MB."
+            )
+        
         # Parse tags & allowed_departments
         if isinstance(tags, str):
             tags_list = [t.strip() for t in tags.split(",") if t.strip()]

@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { supabase } from '../lib/supabase';
-import { Button, Card, Badge, EmptyState, LoadingSpinner, CardSkeleton } from '../components/ui';
-import { DEPARTMENTS, DEPT_COLORS } from '../lib/constants';
-import { Search, FileText, Download } from 'lucide-react';
+import { Button, Card, Badge, EmptyState, LoadingSpinner } from '../components/ui';
+import { useDepartments } from '../hooks/useDepartments';
+import { Search, FileText, ExternalLink, Bot, Download, Filter } from 'lucide-react';
 
-const ViewDocumentsPage = () => {
+export default function ViewDocumentsPage() {
+  const navigate = useNavigate();
+  const { departments, getDeptColor } = useDepartments();
+
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -20,7 +24,7 @@ const ViewDocumentsPage = () => {
       setError('');
       const params = {
         page,
-        limit: 20,
+        limit: 18,
         ...(search && { search }),
         ...(department !== 'All' && { department }),
       };
@@ -31,14 +35,14 @@ const ViewDocumentsPage = () => {
       
       if (response.data.total_pages) {
         setTotalPages(response.data.total_pages);
-      } else if (docs.length === 20) {
+      } else if (docs.length === 18) {
         setTotalPages(page + 1);
       } else {
         setTotalPages(page);
       }
     } catch (err) {
       console.error('Error fetching documents:', err);
-      setError('Failed to load documents. Please try again.');
+      setError('Failed to load documents. Please check backend connection.');
     } finally {
       setLoading(false);
     }
@@ -51,22 +55,12 @@ const ViewDocumentsPage = () => {
     return () => clearTimeout(delayDebounceFn);
   }, [search, department, page]);
 
-  const handleSearchChange = (e) => {
-    setSearch(e.target.value);
-    setPage(1);
-  };
-
-  const handleDepartmentChange = (dept) => {
-    setDepartment(dept);
-    setPage(1);
-  };
-
   const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
+    if (!bytes || bytes === 0) return '0 KB';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
   const handleView = async (doc) => {
@@ -88,128 +82,148 @@ const ViewDocumentsPage = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h1 className="text-2xl font-bold text-slate-50">Documents</h1>
-        <div className="relative w-full md:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+    <div className="space-y-6 pb-12">
+      {/* Header & Search */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--color-text)]">Document Repository</h1>
+          <p className="text-xs md:text-sm text-[var(--color-text-secondary)] mt-1">
+            Browse published institutional policies, circulars, and departmental resources.
+          </p>
+        </div>
+
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-secondary)]" />
           <input
             type="text"
-            placeholder="Search documents..."
+            placeholder="Search by title..."
             value={search}
-            onChange={handleSearchChange}
-            className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-50 focus:outline-none focus:border-orange-500 transition-colors text-sm"
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="input-field pl-9 text-xs py-2 rounded-xl"
           />
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      {/* Dynamic Department Pill Bar */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none">
         <button
-          onClick={() => handleDepartmentChange('All')}
-          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+          onClick={() => { setDepartment('All'); setPage(1); }}
+          className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
             department === 'All'
-              ? 'bg-orange-500 text-white'
-              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              ? 'bg-teal text-white shadow-sm'
+              : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-teal'
           }`}
         >
-          All
+          All Departments
         </button>
-        {DEPARTMENTS.map((dept) => (
+        {departments.map((dept) => (
           <button
-            key={dept}
-            onClick={() => handleDepartmentChange(dept)}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              department === dept
-                ? 'bg-orange-500 text-white'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            key={dept.id || dept.name}
+            onClick={() => { setDepartment(dept.name); setPage(1); }}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              department === dept.name
+                ? 'bg-teal text-white shadow-sm'
+                : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-teal'
             }`}
           >
-            {dept}
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: dept.color || '#599692' }} />
+            <span>{dept.name}</span>
           </button>
         ))}
       </div>
 
       {error && (
-        <div className="p-4 bg-red-900/50 border border-red-500/50 rounded-lg text-red-200 text-sm">
+        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-500 text-xs">
           {error}
         </div>
       )}
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <CardSkeleton key={i} />
-          ))}
-        </div>
+        <LoadingSpinner size="md" message="Loading repository files..." />
       ) : documents.length === 0 ? (
         <EmptyState
           icon={FileText}
-          title="No documents found"
-          description="Try adjusting your search or filters"
+          title="No Documents Found"
+          description={search ? "No documents match your query or department filter." : "The document repository is currently empty."}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {documents.map((doc) => (
-            <Card key={doc.id} className="flex flex-col h-full">
-              <div className="p-5 flex-1 flex flex-col">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline" className={DEPT_COLORS[doc.department] || 'text-slate-300 border-slate-600'}>
+            <Card key={doc.id} className="flex flex-col justify-between p-4 h-full" hover>
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2.5">
+                  {doc.department && (
+                    <Badge.Custom bgColor={getDeptColor(doc.department)}>
                       {doc.department}
-                    </Badge>
-                    {doc.file_type && (
-                      <Badge variant="secondary">{doc.file_type.toUpperCase()}</Badge>
-                    )}
-                  </div>
+                    </Badge.Custom>
+                  )}
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-secondary)] px-2 py-0.5 rounded bg-[var(--color-surface-alt)]">
+                    {doc.file_type || 'PDF'}
+                  </span>
                 </div>
                 
-                <h3 className="text-lg font-semibold text-slate-50 mb-2 line-clamp-2">
+                <h3 className="text-sm font-semibold text-[var(--color-text)] line-clamp-2 leading-snug">
                   {doc.title}
                 </h3>
                 
-                <div className="flex flex-wrap gap-1 mb-4 mt-auto pt-4">
-                  {(doc.tags || []).map((tag, idx) => (
-                    <span key={idx} className="text-xs bg-slate-800 text-slate-400 px-2 py-1 rounded">
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="flex justify-between items-center text-xs text-slate-400 mt-2 border-t border-slate-700 pt-3">
-                  <span>{formatFileSize(doc.file_size_bytes || doc.file_size || 0)}</span>
-                  <span>{new Date(doc.created_at).toLocaleDateString()}</span>
-                </div>
+                {doc.tags && doc.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-3">
+                    {doc.tags.map((tag, idx) => (
+                      <span key={idx} className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] font-medium">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="px-5 py-3 border-t border-slate-700 bg-slate-800/50">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="w-full flex justify-center items-center gap-2"
-                  onClick={() => handleView(doc)}
-                >
-                  <Download className="w-4 h-4" /> View Document
-                </Button>
+
+              <div className="pt-4 mt-4 border-t border-[var(--color-border)] flex items-center justify-between">
+                <span className="text-[11px] text-[var(--color-text-secondary)]">
+                  {formatFileSize(doc.file_size_bytes || doc.file_size)}
+                </span>
+                
+                <div className="flex items-center gap-1.5">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="p-1.5 text-xs text-teal hover:bg-teal/10"
+                    title="Ask AI regarding this document"
+                    onClick={() => navigate(`/employee/chat?q=${encodeURIComponent('Tell me about the contents of ' + doc.title)}`)}
+                  >
+                    <Bot size={15} />
+                  </Button>
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    className="text-xs px-2.5 py-1"
+                    onClick={() => handleView(doc)}
+                  >
+                    <ExternalLink size={12} className="mr-1" />
+                    <span>Open</span>
+                  </Button>
+                </div>
               </div>
             </Card>
           ))}
         </div>
       )}
 
-      {!loading && documents.length > 0 && (
-        <div className="flex justify-center items-center gap-4 mt-8 pt-4 border-t border-slate-800">
+      {/* Pagination Controls */}
+      {!loading && documents.length > 0 && totalPages > 1 && (
+        <div className="flex justify-center items-center gap-3 pt-6 border-t border-[var(--color-border)]">
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
-            disabled={page === 1}
+            disabled={page <= 1}
             onClick={() => setPage(p => Math.max(1, p - 1))}
           >
             Previous
           </Button>
-          <span className="text-sm text-slate-400">
+          <span className="text-xs text-[var(--color-text-secondary)] font-medium">
             Page {page} of {totalPages}
           </span>
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             disabled={page >= totalPages}
             onClick={() => setPage(p => p + 1)}
@@ -220,6 +234,4 @@ const ViewDocumentsPage = () => {
       )}
     </div>
   );
-};
-
-export default ViewDocumentsPage;
+}

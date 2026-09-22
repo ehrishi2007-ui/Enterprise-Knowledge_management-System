@@ -112,4 +112,3 @@ async def search_documents(
     except Exception as e:
         logger.error(f"Error in search: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Search failed")
-

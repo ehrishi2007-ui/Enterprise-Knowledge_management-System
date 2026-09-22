@@ -1,30 +1,33 @@
 import React from 'react';
 
-export function TabSwitcher({ tabs = [], activeTab, onChange, onTabChange, className = '' }) {
-  const handleChange = onChange || onTabChange;
-
+export default function TabSwitcher({ tabs, activeTab, onChange, className = '' }) {
   return (
-    <div className={`inline-flex bg-slate-800 border border-slate-700 rounded-lg p-1 ${className}`}>
-      {tabs.map((tab, idx) => {
-        const key = typeof tab === 'string' ? tab : (tab.id ?? tab.key ?? tab.value ?? String(idx));
-        const label = typeof tab === 'string' ? tab : (tab.label ?? tab.name ?? key);
-        const isActive = activeTab === key;
-
-        return (
-          <button
-            key={key}
-            type="button"
-            onClick={() => handleChange && handleChange(key)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-              isActive 
-                ? 'bg-orange-500 text-white shadow-sm' 
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
-            }`}
-          >
-            {label}
-          </button>
-        );
-      })}
+    <div className={`flex gap-1 p-1 bg-[var(--color-surface-alt)] rounded-lg ${className}`}>
+      {tabs.map((tab) => (
+        <button
+          key={tab.value}
+          onClick={() => onChange(tab.value)}
+          className={`
+            flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all duration-150
+            ${activeTab === tab.value
+              ? 'bg-[var(--color-surface)] text-teal shadow-sm'
+              : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
+            }
+          `}
+        >
+          {tab.icon && <tab.icon className="h-4 w-4" />}
+          {tab.label}
+          {tab.count !== undefined && (
+            <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+              activeTab === tab.value
+                ? 'bg-teal/10 text-teal'
+                : 'bg-[var(--color-border)] text-[var(--color-text-secondary)]'
+            }`}>
+              {tab.count}
+            </span>
+          )}
+        </button>
+      ))}
     </div>
   );
 }

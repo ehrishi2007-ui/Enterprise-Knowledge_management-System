@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import api from '../../lib/api';
 import { Modal, Button } from '../ui';
 import { Megaphone, Send } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function AddAnnouncementModal({ isOpen, onClose, onAdded }) {
   const [title, setTitle] = useState('');
@@ -20,12 +21,15 @@ export default function AddAnnouncementModal({ isOpen, onClose, onAdded }) {
 
     try {
       const res = await api.post('/announcements/', { title, content });
+      toast.success('Announcement published');
       if (onAdded) onAdded(res.data);
       setTitle('');
       setContent('');
       onClose();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to publish announcement');
+      const msg = err.response?.data?.detail || 'Failed to publish announcement';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -35,33 +39,32 @@ export default function AddAnnouncementModal({ isOpen, onClose, onAdded }) {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Create Campus Announcement"
-      icon={Megaphone}
+      title="Create Organization Announcement"
       size="md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400">
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-500">
             {error}
           </div>
         )}
 
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1">
+          <label className="label">
             Announcement Title *
           </label>
           <input
             type="text"
             required
-            placeholder="e.g. Revised Lab Guidelines or Campus Maintenance Notice"
+            placeholder="e.g. Revised Policy Guidelines or Academic Calendar Notice"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-orange-500 placeholder-slate-500"
+            className="input-field text-sm"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1">
+          <label className="label">
             Details / Full Message
           </label>
           <textarea
@@ -69,11 +72,11 @@ export default function AddAnnouncementModal({ isOpen, onClose, onAdded }) {
             placeholder="Enter announcement description..."
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-orange-500 placeholder-slate-500 resize-none leading-relaxed"
+            className="input-field text-sm resize-none"
           />
         </div>
 
-        <div className="flex justify-end gap-3 pt-3 border-t border-slate-700">
+        <div className="flex justify-end gap-3 pt-3 border-t border-[var(--color-border)]">
           <Button variant="ghost" size="sm" type="button" onClick={onClose}>
             Cancel
           </Button>

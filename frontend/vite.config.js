@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -10,6 +9,14 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        // Fix for large file uploads timing out
+        timeout: 120000,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            // Remove default content-length limit for file uploads
+            proxyReq.setHeader('connection', 'keep-alive');
+          });
+        },
       }
     }
   }

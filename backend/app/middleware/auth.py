@@ -10,7 +10,6 @@ security = HTTPBearer()
 def verify_token(token: str) -> dict:
     """Decodes and verifies a Supabase JWT."""
     try:
-        # Supabase uses HS256 and the SUPABASE_JWT_SECRET
         payload = jwt.decode(
             token,
             settings.SUPABASE_JWT_SECRET,
@@ -29,13 +28,13 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     """Extracts the token, verifies it, and retrieves the user profile from Supabase."""
     token = credentials.credentials
 
-    # Development demo token support for local testing and demo mode
+    # Development demo token support
     if settings.ENVIRONMENT == "development" and token.startswith("demo-token"):
         is_employee = "employee" in token.lower()
         demo_id = uuid.UUID("00000000-0000-0000-0000-000000000002") if is_employee else uuid.UUID("00000000-0000-0000-0000-000000000001")
         return {
             "id": demo_id,
-            "email": "employee@hitam.edu.in" if is_employee else "admin@hitam.edu.in",
+            "email": "employee@demo.org" if is_employee else "admin@demo.org",
             "role": "employee" if is_employee else "admin",
             "department": "Engineering" if is_employee else "Operations",
             "display_name": "Alex Morgan" if is_employee else "Rachel Collins",
@@ -61,19 +60,17 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             headers={"WWW-Authenticate": "Bearer"},
         )
         
-    # Query Supabase for the user's profile
     supabase = get_supabase_client()
     response = supabase.table("profiles").select("*").eq("id", str(user_id)).execute()
     
     if not response.data:
-        # Fallback profile if user was created directly in Supabase Auth
         user_meta = payload.get("user_metadata", {})
         display_name = user_meta.get("display_name") or user_meta.get("full_name") or (payload.get("email", "").split("@")[0] if payload.get("email") else "User")
         user = {
             "id": str(user_id),
             "display_name": display_name,
             "role": user_meta.get("role", "employee"),
-            "department": user_meta.get("department", "Engineering"),
+            "department": user_meta.get("department", "General"),
             "is_active": True
         }
         try:

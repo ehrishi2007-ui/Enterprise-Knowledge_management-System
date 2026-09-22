@@ -3,23 +3,106 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --color-navy: #11172a;
+    --color-slate: #626c7d;
+    --color-teal: #599692;
+    --color-teal-hover: #4a837f;
+    --color-teal-light: #e8f0ef;
+    --color-ice: #dfe5ec;
+    --color-bg: #F8FAFB;
+    --color-surface: #FFFFFF;
+    --color-surface-alt: #dfe5ec;
+    --color-text: #1a1a2e;
+    --color-text-secondary: #626c7d;
+    --color-border: #dfe5ec;
+  }
+
+  .dark {
+    --color-bg: #0F0F0F;
+    --color-surface: #1A1A1A;
+    --color-surface-alt: #252525;
+    --color-text: #e4e4e7;
+    --color-text-secondary: #9ca3af;
+    --color-border: #2A2A2A;
+  }
+
   body {
-    @apply bg-slate-900 text-slate-50 antialiased;
+    @apply bg-[var(--color-bg)] text-[var(--color-text)] transition-colors duration-200;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  /* Scrollbar Styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate2/30 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate2/50;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    @apply bg-white/10;
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    @apply bg-white/20;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-sm;
+  }
+  .card-hover {
+    @apply card hover:shadow-md hover:border-teal/30 transition-all duration-200;
+  }
+  .btn-primary {
+    @apply bg-teal hover:bg-teal-500 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-teal/50;
+  }
+  .btn-secondary {
+    @apply bg-[var(--color-surface-alt)] hover:bg-[var(--color-border)] text-[var(--color-text)] font-medium px-4 py-2 rounded-lg transition-colors duration-150 border border-[var(--color-border)];
+  }
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150;
+  }
+  .input-field {
+    @apply w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-teal/50 focus:border-teal transition-colors;
+  }
+  .label {
+    @apply block text-sm font-medium text-[var(--color-text-secondary)] mb-1;
   }
 }
 
 @layer utilities {
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  .text-primary { color: var(--color-text); }
+  .text-secondary { color: var(--color-text-secondary); }
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
   }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    @apply bg-slate-800;
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out;
   }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-slate-700 rounded-full;
+
+  @keyframes slide-in-right {
+    from { opacity: 0; transform: translateX(16px); }
+    to { opacity: 1; transform: translateX(0); }
   }
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    @apply bg-orange-500;
+  .animate-slide-in {
+    animation: slide-in-right 0.2s ease-out;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+  .animate-pulse-dot {
+    animation: pulse-dot 1.5s ease-in-out infinite;
   }
 }

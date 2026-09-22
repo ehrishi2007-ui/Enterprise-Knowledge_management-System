@@ -12,6 +12,7 @@ from app.routers.users import router as users_router
 from app.routers.feedback import router as feedback_router
 from app.routers.settings import router as settings_router
 from app.routers.announcements import router as announcements_router
+from app.routers.departments import router as departments_router
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +44,12 @@ async def lifespan(app: FastAPI):
     logger.info("EKMS API shutting down.")
 
 app = FastAPI(
-    title="EKMS API - Enterprise Knowledge Management System",
-    description="Backend API for the Enterprise Knowledge Management System",
-    version="1.0.0",
+    title="EKMS API - Knowledge Management System",
+    description="Backend API for the Knowledge Management System with RAG-powered AI chat",
+    version="2.0.0",
     lifespan=lifespan
 )
 
-# CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -60,9 +60,21 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "healthy", "version": "1.0.0"}
+    """Health check with ChromaDB connectivity status."""
+    chroma_status = "unknown"
+    try:
+        from app.services.chroma_service import chroma_service
+        stats = chroma_service.get_collection_stats()
+        chroma_status = stats.get("status", "unknown")
+    except Exception:
+        chroma_status = "error"
+    
+    return {
+        "status": "healthy",
+        "version": "2.0.0",
+        "chromadb": chroma_status
+    }
 
-# Include routers
 app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
 app.include_router(documents_router, prefix="/api/documents", tags=["Documents"])
 app.include_router(search_router, prefix="/api/search", tags=["Search"])
@@ -70,3 +82,4 @@ app.include_router(users_router, prefix="/api/users", tags=["Users"])
 app.include_router(feedback_router, prefix="/api/feedback", tags=["Feedback"])
 app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
 app.include_router(announcements_router, prefix="/api/announcements", tags=["Announcements"])
+app.include_router(departments_router, prefix="/api/departments", tags=["Departments"])

@@ -1,12 +1,12 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 from uuid import UUID
 
 # === Auth ===
 class UserInfo(BaseModel):
     id: UUID
-    email: str
+    email: Optional[str] = None
     display_name: str
     role: str
     department: Optional[str] = None
@@ -14,8 +14,8 @@ class UserInfo(BaseModel):
 
 # === Chat ===
 class ChatRequest(BaseModel):
-    question: str = Field(..., min_length=1, max_length=2000, description="The user's question")
-    conversation_id: Optional[UUID] = Field(None, description="Existing conversation ID for follow-up questions")
+    question: str = Field(..., min_length=1, max_length=2000)
+    conversation_id: Optional[UUID] = None
 
 class SourceCitation(BaseModel):
     document_id: Optional[str] = None
@@ -30,7 +30,7 @@ class ChatResponse(BaseModel):
     answer: str
     sources: List[SourceCitation] = []
     conversation_id: UUID
-    message_id: UUID
+    message_id: Optional[UUID] = None
     response_time_ms: int
 
 class ConversationSummary(BaseModel):
@@ -45,7 +45,7 @@ class ConversationDetail(BaseModel):
     id: UUID
     title: str
     is_bookmarked: bool = False
-    messages: List[dict] = []  # Each has role, content, sources, created_at
+    messages: List[dict] = []
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -73,16 +73,6 @@ class DocumentTagsUpdate(BaseModel):
     allowed_departments: Optional[List[str]] = None
 
 # === Search ===
-class SearchRequest(BaseModel):
-    q: str = Field(..., min_length=1, description="Search query")
-    search_type: str = Field("semantic", description="'semantic' or 'keyword'")
-    department: Optional[str] = None
-    tags: Optional[List[str]] = None
-    file_type: Optional[str] = None
-    date_from: Optional[datetime] = None
-    date_to: Optional[datetime] = None
-    limit: int = Field(10, ge=1, le=50)
-
 class SearchResult(BaseModel):
     id: Optional[str] = None
     document_id: Optional[str] = None
@@ -95,7 +85,6 @@ class SearchResult(BaseModel):
     snippet: str = ""
     page_number: Optional[int] = None
     created_at: Optional[datetime] = None
-    metadata: Optional[dict] = None
 
 class SearchResponse(BaseModel):
     results: List[SearchResult] = []
@@ -105,10 +94,10 @@ class SearchResponse(BaseModel):
 
 # === Users (Admin) ===
 class UserCreate(BaseModel):
-    email: str = Field(..., description="User's email address")
-    password: str = Field(..., min_length=6, description="Initial password")
+    email: str
+    password: str = Field(..., min_length=6)
     display_name: str = Field(..., min_length=1)
-    role: str = Field("employee", description="'employee' or 'admin'")
+    role: str = "employee"
     department: Optional[str] = None
 
 class UserUpdate(BaseModel):
@@ -132,7 +121,7 @@ class FeedbackResponse(BaseModel):
     message_id: UUID
     rating: str
     comment: Optional[str] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
 class FeedbackSummary(BaseModel):
     total_feedback: int
@@ -151,7 +140,7 @@ class SettingsResponse(BaseModel):
     settings: List[SettingItem]
 
 class SettingsUpdate(BaseModel):
-    settings: dict = Field(..., description="Key-value pairs to update, e.g. {'temperature': '0.5'}")
+    settings: dict = Field(..., description="Key-value pairs to update")
 
 # === Announcements ===
 class AnnouncementCreate(BaseModel):
@@ -163,7 +152,27 @@ class AnnouncementResponse(BaseModel):
     title: str
     content: Optional[str] = None
     created_by: Optional[UUID] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
+
+# === Departments ===
+class DepartmentCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    color: str = Field(default="#599692")
+    description: Optional[str] = None
+
+class DepartmentUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class DepartmentResponse(BaseModel):
+    id: UUID
+    name: str
+    color: str = "#599692"
+    description: Optional[str] = None
+    is_active: bool = True
+    created_at: Optional[datetime] = None
 
 # === Dashboard ===
 class AdminDashboardStats(BaseModel):
@@ -176,10 +185,10 @@ class AdminDashboardStats(BaseModel):
     top_questions: List[dict] = []
 
 class EmployeeDashboard(BaseModel):
-    recent_chats: List[ConversationSummary] = []
-    recent_documents: List[DocumentResponse] = []
-    bookmarked_chats: List[ConversationSummary] = []
-    announcements: List[AnnouncementResponse] = []
+    recent_chats: List[Any] = []
+    recent_documents: List[Any] = []
+    bookmarked_chats: List[Any] = []
+    announcements: List[Any] = []
 
 # === Common ===
 class MessageResponse(BaseModel):

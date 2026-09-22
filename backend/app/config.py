@@ -4,6 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 _ENV_FILE_PATH = Path(__file__).resolve().parent.parent / ".env"
+# Absolute path to project root for ChromaDB fallback
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 class Settings(BaseSettings):
     # Supabase
@@ -14,22 +16,24 @@ class Settings(BaseSettings):
     
     # Gemini
     GEMINI_API_KEY: str
-    GEMINI_MODEL: str = "gemini-3.6-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     
     # ChromaDB
     CHROMA_HOST: str = "localhost"
     CHROMA_PORT: int = 8001
+    CHROMA_DATA_PATH: str = str(PROJECT_ROOT / "chroma_data")
     
     # RAG Configuration
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
     TOP_K_RESULTS: int = 5
     DEFAULT_TEMPERATURE: float = 0.3
-    DEFAULT_MAX_TOKENS: int = 512
+    DEFAULT_MAX_TOKENS: int = 1024
     
     # App
     ENVIRONMENT: str = "development"
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    MAX_UPLOAD_SIZE_MB: int = 50
     
     @property
     def cors_origins_list(self) -> List[str]:
@@ -42,4 +46,3 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
-

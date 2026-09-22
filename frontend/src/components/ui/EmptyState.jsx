@@ -1,16 +1,29 @@
 import React from 'react';
 import { Inbox } from 'lucide-react';
+import Button from './Button';
 
-export function EmptyState({ icon: Icon = Inbox, title, message, description, action }) {
-  const desc = description || message;
+export default function EmptyState({
+  icon: Icon = Inbox,
+  title = 'No data found',
+  description,
+  action,
+  actionLabel,
+  className = '',
+}) {
   return (
-    <div className="flex flex-col items-center justify-center p-8 text-center bg-slate-800/50 rounded-xl border border-slate-700 border-dashed">
-      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-slate-800 mb-4 border border-slate-700">
-        {React.isValidElement(Icon) ? Icon : <Icon className="w-6 h-6 text-slate-400" />}
+    <div className={`flex flex-col items-center justify-center py-12 px-4 text-center ${className}`}>
+      <div className="w-14 h-14 rounded-2xl bg-[var(--color-surface-alt)] flex items-center justify-center mb-4">
+        <Icon className="h-7 w-7 text-[var(--color-text-secondary)]" />
       </div>
-      <h3 className="text-base font-medium text-slate-50 mb-1">{title}</h3>
-      {desc && <p className="text-sm text-slate-400 max-w-sm mb-4">{desc}</p>}
-      {action && <div>{action}</div>}
+      <h3 className="text-base font-semibold text-[var(--color-text)] mb-1">{title}</h3>
+      {description && (
+        <p className="text-sm text-[var(--color-text-secondary)] max-w-sm mb-4">{description}</p>
+      )}
+      {action && actionLabel && (
+        <Button onClick={action} variant="primary" size="sm">
+          {actionLabel}
+        </Button>
+      )}
     </div>
   );
 }

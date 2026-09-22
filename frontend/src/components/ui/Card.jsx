@@ -1,23 +1,41 @@
 import React from 'react';
 
-export function Card({ title, subtitle, icon: Icon, headerAction, children, className = '' }) {
+export default function Card({ children, className = '', hover = false, padding = true, ...props }) {
   return (
-    <div className={`bg-slate-800 border border-slate-700 rounded-xl transition-colors duration-200 hover:border-slate-600 ${className}`}>
-      {(title || Icon || headerAction) && (
-        <div className="flex items-center justify-between p-4 border-b border-slate-700">
-          <div className="flex items-center space-x-3">
-            {Icon && <Icon className="w-5 h-5 text-slate-400" />}
-            <div>
-              {title && <h3 className="text-lg font-medium text-slate-50">{title}</h3>}
-              {subtitle && <p className="text-sm text-slate-400">{subtitle}</p>}
-            </div>
-          </div>
-          {headerAction && <div>{headerAction}</div>}
-        </div>
-      )}
-      <div className="p-4">
-        {children}
-      </div>
+    <div
+      className={`
+        bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-sm
+        ${hover ? 'hover:shadow-md hover:border-teal/30 transition-all duration-200 cursor-pointer' : ''}
+        ${padding ? 'p-5' : ''}
+        ${className}
+      `}
+      {...props}
+    >
+      {children}
     </div>
   );
 }
+
+Card.Header = function CardHeader({ children, className = '' }) {
+  return (
+    <div className={`flex items-center justify-between mb-4 ${className}`}>
+      {children}
+    </div>
+  );
+};
+
+Card.Title = function CardTitle({ children, className = '' }) {
+  return (
+    <h3 className={`text-lg font-semibold text-[var(--color-text)] ${className}`}>
+      {children}
+    </h3>
+  );
+};
+
+Card.Description = function CardDescription({ children, className = '' }) {
+  return (
+    <p className={`text-sm text-[var(--color-text-secondary)] ${className}`}>
+      {children}
+    </p>
+  );
+};

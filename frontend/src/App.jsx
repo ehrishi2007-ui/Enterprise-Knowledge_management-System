@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 
 // Layout Components
 import Sidebar from './components/layout/Sidebar';
@@ -33,13 +35,24 @@ function AppLayout({ children }) {
   // Derive title from pathname
   const getPageTitle = (path) => {
     const parts = path.split('/').filter(Boolean);
-    if (parts.length < 2) return 'HITAM EKMS';
+    if (parts.length < 2) return 'Knowledge Hub';
     const page = parts[parts.length - 1];
-    return page.charAt(0).toUpperCase() + page.slice(1);
+    const titles = {
+      dashboard: 'Overview Dashboard',
+      chat: 'AI Knowledge Assistant',
+      search: 'Document & Knowledge Search',
+      documents: 'Document Repository',
+      bookmarks: 'Saved Bookmarks',
+      users: 'User & Access Management',
+      departments: 'Departments & Units',
+      feedback: 'Feedback & Analytics',
+      settings: 'System Configuration',
+    };
+    return titles[page] || (page.charAt(0).toUpperCase() + page.slice(1));
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-900">
+    <div className="flex h-screen overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)] transition-colors duration-200">
       <Sidebar 
         collapsed={sidebarCollapsed} 
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -52,7 +65,7 @@ function AppLayout({ children }) {
           pageTitle={getPageTitle(location.pathname)}
         />
         <main className="flex-1 overflow-y-auto w-full p-4 md:p-6 lg:p-8">
-          <div className="mx-auto max-w-7xl">
+          <div className="mx-auto max-w-7xl animate-fade-in">
             {children}
           </div>
         </main>
@@ -62,11 +75,22 @@ function AppLayout({ children }) {
 }
 
 function AppRoutes() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[var(--color-bg)]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal border-t-transparent" />
+          <span className="text-sm font-medium text-[var(--color-text-secondary)]">Loading EKMS...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={!user ? <Login /> : <Navigate to={`/${user.role}/dashboard`} replace />} />
       
       {/* Protected Admin Routes */}
       <Route 
@@ -115,7 +139,7 @@ function AppRoutes() {
         } 
       />
 
-      {/* Default Routes */}
+      {/* Default Fallback Routes */}
       <Route 
         path="/" 
         element={
@@ -131,10 +155,23 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Toaster 
+            position="top-right"
+            toastOptions={{
+              style: {
+                background: 'var(--color-surface)',
+                color: 'var(--color-text)',
+                border: '1px solid var(--color-border)',
+                borderRadius: '0.75rem',
+              }
+            }}
+          />
+          <AppRoutes />
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
