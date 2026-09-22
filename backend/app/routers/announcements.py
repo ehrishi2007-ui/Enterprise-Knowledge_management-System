@@ -13,6 +13,7 @@ from app.models.schemas import (
 router = APIRouter(tags=["Announcements"])
 logger = logging.getLogger(__name__)
 
+@router.get("", response_model=List[AnnouncementResponse])
 @router.get("/", response_model=List[AnnouncementResponse])
 async def list_announcements(
     current_user: dict = Depends(get_current_user),
@@ -28,6 +29,7 @@ async def list_announcements(
             return []
         raise HTTPException(status_code=500, detail="Failed to fetch announcements")
 
+@router.post("", response_model=AnnouncementResponse)
 @router.post("/", response_model=AnnouncementResponse)
 async def create_announcement(
     announcement: AnnouncementCreate,

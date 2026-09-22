@@ -9,6 +9,7 @@ from app.models.schemas import SettingsResponse, SettingsUpdate, SettingItem
 router = APIRouter(tags=["Settings"])
 logger = logging.getLogger(__name__)
 
+@router.get("", response_model=SettingsResponse)
 @router.get("/", response_model=SettingsResponse)
 async def get_settings(
     current_user: dict = Depends(get_current_user),
@@ -29,6 +30,7 @@ async def get_settings(
             ])
         raise HTTPException(status_code=500, detail="Failed to fetch settings")
 
+@router.put("", response_model=SettingsResponse)
 @router.put("/", response_model=SettingsResponse)
 async def update_settings(
     update_data: SettingsUpdate,

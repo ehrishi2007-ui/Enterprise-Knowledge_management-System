@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
-    title: str = Form(...),
-    department: str = Form(...),
+    title: Optional[str] = Form(None),
+    department: Optional[str] = Form(None),
     content_type: str = Form("text_only"),
     tags: str = Form(""),
     allowed_departments: str = Form(""),
@@ -29,6 +29,8 @@ async def upload_document(
     """Upload a PDF/TXT document, process text chunks (Text, OCR Scanned, or Hybrid Combination), and save to Supabase."""
     try:
         document_id = str(uuid.uuid4())
+        doc_title = title.strip() if (title and title.strip()) else (Path(file.filename).stem if file.filename else "Document")
+        doc_dept = department.strip() if (department and department.strip()) else "General"
         file_bytes = await file.read()
         
         # Validate file size
@@ -64,13 +66,13 @@ async def upload_document(
         
         metadata = {
             "id": document_id,
-            "title": title,
+            "title": doc_title,
             "filename": file.filename,
             "file_type": file_type,
             "content_type": content_type,
             "file_size_bytes": len(file_bytes),
             "storage_path": storage_path,
-            "department": department,
+            "department": doc_dept,
             "tags": tags_list,
             "allowed_departments": allowed_depts_list,
             "uploaded_by": str(current_user["id"]),
@@ -116,6 +118,7 @@ async def upload_document(
         logger.error(f"Error uploading document: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to upload document: {str(e)}")
 
+@router.get("", response_model=List[DocumentResponse])
 @router.get("/", response_model=List[DocumentResponse])
 async def list_documents(
     department: Optional[str] = None,

@@ -30,7 +30,7 @@ async def ask_question(
         # If no conversation_id, create a new one
         if not conversation_id:
             conv_resp = supabase.table("conversations").insert({
-                "user_id": current_user["id"],
+                "user_id": str(current_user["id"]),
                 "title": request.question[:50] + "..." if len(request.question) > 50 else request.question
             }).execute()
             
@@ -43,10 +43,12 @@ async def ask_question(
         history = history_resp.data[::-1] if history_resp.data else [] # reverse to chronological
         
         # Call RAG pipeline (returns dict with answer, sources, response_time_ms)
+        # Admins have access to all documents across all departments
+        dept_filter = "All" if current_user.get("role") == "admin" else current_user.get("department")
         rag_result = rag_pipeline.ask(
             question=request.question,
             conversation_history=history,
-            user_department=current_user.get("department"),
+            user_department=dept_filter,
             supabase_client=supabase
         )
         

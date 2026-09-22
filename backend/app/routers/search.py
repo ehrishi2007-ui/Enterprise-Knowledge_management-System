@@ -10,6 +10,7 @@ from app.services.chroma_service import chroma_service
 router = APIRouter(tags=["Search"])
 logger = logging.getLogger(__name__)
 
+@router.get("", response_model=SearchResponse)
 @router.get("/", response_model=SearchResponse)
 async def search_documents(
     q: str = Query(..., min_length=1),

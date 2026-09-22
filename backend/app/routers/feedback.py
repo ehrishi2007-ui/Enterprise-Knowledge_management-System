@@ -10,6 +10,7 @@ from app.models.schemas import FeedbackCreate, FeedbackResponse, FeedbackSummary
 router = APIRouter(tags=["Feedback"])
 logger = logging.getLogger(__name__)
 
+@router.post("", response_model=FeedbackResponse)
 @router.post("/", response_model=FeedbackResponse)
 async def create_feedback(
     feedback: FeedbackCreate,
@@ -81,6 +82,7 @@ async def get_feedback_summary(
             )
         raise HTTPException(status_code=500, detail="Failed to fetch feedback summary")
 
+@router.get("", response_model=List[FeedbackResponse])
 @router.get("/", response_model=List[FeedbackResponse])
 async def list_feedback(
     page: int = Query(1, ge=1),

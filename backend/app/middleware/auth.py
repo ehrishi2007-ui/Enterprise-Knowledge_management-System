@@ -31,7 +31,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     # Development demo token support
     if settings.ENVIRONMENT == "development" and token.startswith("demo-token"):
         is_employee = "employee" in token.lower()
-        demo_id = uuid.UUID("00000000-0000-0000-0000-000000000002") if is_employee else uuid.UUID("00000000-0000-0000-0000-000000000001")
+        demo_id = "00000000-0000-0000-0000-000000000002" if is_employee else "00000000-0000-0000-0000-000000000001"
         return {
             "id": demo_id,
             "email": "employee@demo.org" if is_employee else "admin@demo.org",
@@ -87,7 +87,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         )
         
     return {
-        "id": user_id,
+        "id": str(user_id),
         "email": payload.get("email") or user.get("email"),
         "role": user.get("role", "employee"),
         "department": user.get("department"),

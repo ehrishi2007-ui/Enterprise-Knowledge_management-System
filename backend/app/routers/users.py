@@ -17,6 +17,7 @@ async def get_my_profile(
     """Get current authenticated user profile."""
     return UserInfo(**current_user)
 
+@router.get("", response_model=UserListResponse)
 @router.get("/", response_model=UserListResponse)
 async def list_users(
     role: Optional[str] = None,
@@ -51,6 +52,7 @@ async def list_users(
             return UserListResponse(users=demo_users, total_count=len(demo_users))
         raise HTTPException(status_code=500, detail="Failed to fetch users")
 
+@router.post("", response_model=UserInfo)
 @router.post("/", response_model=UserInfo)
 async def create_user(
     user_data: UserCreate,

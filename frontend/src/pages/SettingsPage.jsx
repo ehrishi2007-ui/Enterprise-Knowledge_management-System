@@ -7,7 +7,7 @@ import { Button, Card, Badge, LoadingSpinner, Modal } from '../components/ui';
 import { 
   Settings, Sliders, User, CheckCircle2, Save, 
   Sun, Moon, Building2, Sparkles, Plus, Edit2, Trash2, 
-  Briefcase, GraduationCap, Check
+  Briefcase, GraduationCap, Check, Palette
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -28,13 +28,8 @@ export default function SettingsPage() {
   const [topK, setTopK] = useState(5);
   const [modelName, setModelName] = useState('gemini-2.5-flash');
 
-  // Organization settings
-  const [orgName, setOrgName] = useState('Knowledge Management System');
-  const [orgType, setOrgType] = useState('Academic Institution');
-
   const [loading, setLoading] = useState(isAdmin);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
 
   // Department Management inside Settings
   const [newDeptName, setNewDeptName] = useState('');
@@ -46,6 +41,12 @@ export default function SettingsPage() {
   const [editDeptName, setEditDeptName] = useState('');
   const [editDeptColor, setEditDeptColor] = useState('#599692');
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
+  // Delete Confirmation Modal
+  const [deptToDelete, setDeptToDelete] = useState(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingDept, setDeletingDept] = useState(false);
 
   useEffect(() => {
     if (isAdmin) {
@@ -56,7 +57,6 @@ export default function SettingsPage() {
   const fetchSettings = async () => {
     try {
       setLoading(true);
-      setError('');
       const res = await api.get('/settings/');
       const settingsList = res.data?.settings || [];
       
@@ -69,8 +69,6 @@ export default function SettingsPage() {
       setTemperature(parseFloat(getVal('temperature', '0.3')));
       setTopK(parseInt(getVal('top_k', '5'), 10));
       setModelName(getVal('model_name', 'gemini-2.5-flash'));
-      setOrgName(getVal('org_name', 'Knowledge Hub'));
-      setOrgType(getVal('org_type', 'Academic Institution'));
     } catch (err) {
       console.error('Failed to load settings:', err);
     } finally {
@@ -81,20 +79,16 @@ export default function SettingsPage() {
   const handleSaveSettings = async (e) => {
     e.preventDefault();
     setSaving(true);
-    setError('');
-
     try {
       await api.put('/settings/', {
         settings: {
           system_prompt: systemPrompt,
           temperature: String(temperature),
           top_k: String(topK),
-          model_name: modelName,
-          org_name: orgName,
-          org_type: orgType
+          model_name: modelName
         }
       });
-      toast.success('Settings saved successfully!');
+      toast.success('AI settings saved successfully!');
     } catch (err) {
       toast.error('Failed to save settings');
     } finally {
@@ -133,27 +127,40 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!editingDept || !editDeptName.trim()) return;
 
+    setEditSubmitting(true);
     try {
       await api.put(`/departments/${editingDept.id}`, {
         name: editDeptName.trim(),
         color: editDeptColor
       });
-      toast.success('Department updated');
+      toast.success('Department updated successfully!');
       setEditModalOpen(false);
       refreshDepts();
     } catch (err) {
       toast.error('Failed to update department');
+    } finally {
+      setEditSubmitting(false);
     }
   };
 
-  const handleDeleteDept = async (dept) => {
-    if (!confirm(`Delete department "${dept.name}"?`)) return;
+  const handleOpenDelete = (dept) => {
+    setDeptToDelete(dept);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deptToDelete) return;
+    setDeletingDept(true);
     try {
-      await api.delete(`/departments/${dept.id}`);
-      toast.success('Department deleted');
+      await api.delete(`/departments/${deptToDelete.id}`);
+      toast.success(`Department "${deptToDelete.name}" deleted!`);
+      setDeleteModalOpen(false);
+      setDeptToDelete(null);
       refreshDepts();
     } catch (err) {
-      toast.error('Failed to delete department');
+      toast.error('Failed to delete department. Please try again.');
+    } finally {
+      setDeletingDept(false);
     }
   };
 
@@ -190,12 +197,12 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-[var(--color-text)]">Settings</h1>
         <p className="text-xs md:text-sm text-[var(--color-text-secondary)] mt-1">
           {isAdmin 
-            ? 'Manage your departments, AI settings, organization profile, and theme.' 
-            : 'View your account information and preferences.'}
+            ? 'Manage your departments, AI settings, and appearance in one place.' 
+            : 'View your account details and screen preferences.'}
         </p>
       </div>
 
-      {/* 1. SIMPLE DEPARTMENTS MANAGEMENT (ADMIN ONLY) */}
+      {/* 1. DEPARTMENTS MANAGEMENT (LIST FORMAT WITH EDIT & DELETE) */}
       {isAdmin && (
         <Card className="space-y-5">
           <Card.Header>
@@ -204,18 +211,18 @@ export default function SettingsPage() {
                 <Building2 size={18} />
               </div>
               <div>
-                <Card.Title>Departments & Units</Card.Title>
-                <Card.Description>Manage the departments used across documents and users</Card.Description>
+                <Card.Title>Departments</Card.Title>
+                <Card.Description>Manage the departments used to organize documents and users</Card.Description>
               </div>
             </div>
             
-            {/* Quick Templates */}
+            {/* Quick Presets */}
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => handleApplyPreset('college')}
                 className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-[var(--color-surface-alt)] hover:bg-teal/15 text-[var(--color-text)] border border-[var(--color-border)] hover:border-teal transition-all flex items-center gap-1"
-                title="Populate College / University Departments"
+                title="Populate College Departments"
               >
                 <GraduationCap size={13} className="text-teal" />
                 <span>Load College Presets</span>
@@ -224,7 +231,7 @@ export default function SettingsPage() {
                 type="button"
                 onClick={() => handleApplyPreset('corporate')}
                 className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-[var(--color-surface-alt)] hover:bg-teal/15 text-[var(--color-text)] border border-[var(--color-border)] hover:border-teal transition-all flex items-center gap-1"
-                title="Populate Corporate Departments"
+                title="Populate Company Departments"
               >
                 <Briefcase size={13} className="text-teal" />
                 <span>Load Company Presets</span>
@@ -232,8 +239,8 @@ export default function SettingsPage() {
             </div>
           </Card.Header>
 
-          {/* Quick Add Department Form */}
-          <form onSubmit={handleAddDepartment} className="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
+          {/* Add New Department Form */}
+          <form onSubmit={handleAddDepartment} className="flex flex-col sm:flex-row items-center gap-2.5 p-3 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-border)]">
             <input
               type="text"
               required
@@ -244,7 +251,7 @@ export default function SettingsPage() {
             />
             
             {/* Color Swatch Picker */}
-            <div className="flex items-center gap-1.5 shrink-0 bg-[var(--color-surface-alt)] p-1.5 rounded-lg border border-[var(--color-border)]">
+            <div className="flex items-center gap-1.5 shrink-0 bg-[var(--color-surface)] p-1 rounded-lg border border-[var(--color-border)]">
               {PRESET_COLORS.map((c) => (
                 <button
                   key={c}
@@ -252,6 +259,7 @@ export default function SettingsPage() {
                   onClick={() => setNewDeptColor(c)}
                   className="w-5 h-5 rounded-full transition-transform hover:scale-110 flex items-center justify-center text-white"
                   style={{ backgroundColor: c }}
+                  title={c}
                 >
                   {newDeptColor === c && <Check size={10} />}
                 </button>
@@ -270,50 +278,88 @@ export default function SettingsPage() {
             </Button>
           </form>
 
-          {/* Department List Chips */}
+          {/* Department List Table */}
           <div className="pt-2">
-            <span className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider block mb-2">
-              Current Departments ({departments.length})
+            <span className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider block mb-3">
+              Department List ({departments.length})
             </span>
 
             {deptsLoading ? (
               <LoadingSpinner size="sm" />
             ) : departments.length === 0 ? (
-              <p className="text-xs text-[var(--color-text-secondary)] py-2">No departments created yet. Add one above.</p>
+              <div className="p-6 text-center text-xs text-[var(--color-text-secondary)] border border-dashed border-[var(--color-border)] rounded-xl">
+                No departments created yet. Add one above or load a preset template.
+              </div>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {departments.map((dept) => (
-                  <div 
-                    key={dept.id || dept.name}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-xs text-[var(--color-text)] shadow-sm"
-                  >
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: dept.color || '#599692' }} />
-                    <span className="font-semibold">{dept.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditDept(dept)}
-                      className="text-[var(--color-text-secondary)] hover:text-teal ml-1"
-                      title="Edit"
-                    >
-                      <Edit2 size={12} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteDept(dept)}
-                      className="text-[var(--color-text-secondary)] hover:text-red-500"
-                      title="Delete"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                ))}
+              <div className="rounded-xl border border-[var(--color-border)] overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] font-semibold border-b border-[var(--color-border)]">
+                    <tr>
+                      <th className="p-3 pl-4">Department Name</th>
+                      <th className="p-3">Color Badge</th>
+                      <th className="p-3 pr-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--color-border)]">
+                    {departments.map((dept) => (
+                      <tr key={dept.id || dept.name} className="hover:bg-[var(--color-surface-alt)] transition-colors">
+                        <td className="p-3 pl-4">
+                          <div className="flex items-center gap-2.5">
+                            <span 
+                              className="w-3 h-3 rounded-full shrink-0 shadow-sm" 
+                              style={{ backgroundColor: dept.color || '#599692' }} 
+                            />
+                            <span className="font-semibold text-[var(--color-text)] text-xs">
+                              {dept.name}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <span 
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border"
+                            style={{
+                              backgroundColor: `${dept.color || '#599692'}15`,
+                              color: dept.color || '#599692',
+                              borderColor: `${dept.color || '#599692'}30`
+                            }}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: dept.color || '#599692' }} />
+                            {dept.name}
+                          </span>
+                        </td>
+                        <td className="p-3 pr-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditDept(dept)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-[var(--color-text-secondary)] hover:text-teal hover:bg-[var(--color-surface)] border border-transparent hover:border-[var(--color-border)] transition-all"
+                              title="Modify Name & Color"
+                            >
+                              <Edit2 size={13} />
+                              <span>Edit</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDelete(dept)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-red-500 hover:text-red-600 hover:bg-red-500/10 transition-all"
+                              title="Delete Department"
+                            >
+                              <Trash2 size={13} />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
         </Card>
       )}
 
-      {/* 2. AI ASSISTANT SETTINGS (ADMIN ONLY) */}
+      {/* 2. AI SETTINGS (ADMIN ONLY) */}
       {isAdmin && (
         <form onSubmit={handleSaveSettings} className="space-y-6">
           <Card>
@@ -480,7 +526,7 @@ export default function SettingsPage() {
       <Modal
         isOpen={editModalOpen}
         onClose={() => setEditModalOpen(false)}
-        title="Edit Department"
+        title="Modify Department"
         size="sm"
       >
         <form onSubmit={handleSaveEditDept} className="space-y-4">
@@ -492,11 +538,12 @@ export default function SettingsPage() {
               value={editDeptName}
               onChange={(e) => setEditDeptName(e.target.value)}
               className="input-field text-xs py-2"
+              placeholder="e.g. Computer Science or Finance"
             />
           </div>
 
           <div>
-            <label className="label">Color</label>
+            <label className="label">Color Accent</label>
             <div className="flex items-center gap-2 mt-1">
               {PRESET_COLORS.map((c) => (
                 <button
@@ -516,11 +563,33 @@ export default function SettingsPage() {
             <Button variant="ghost" size="sm" type="button" onClick={() => setEditModalOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" size="sm" type="submit">
-              Save
+            <Button variant="primary" size="sm" type="submit" loading={editSubmitting}>
+              Save Changes
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        title="Confirm Delete"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-[var(--color-text-secondary)]">
+            Are you sure you want to delete the department <strong className="text-[var(--color-text)]">"{deptToDelete?.name}"</strong>?
+          </p>
+          <div className="flex justify-end gap-2 pt-3 border-t border-[var(--color-border)]">
+            <Button variant="ghost" size="sm" onClick={() => setDeleteModalOpen(false)} disabled={deletingDept}>
+              Cancel
+            </Button>
+            <Button variant="danger" size="sm" onClick={handleConfirmDelete} loading={deletingDept}>
+              Delete Department
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

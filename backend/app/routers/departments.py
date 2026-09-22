@@ -12,6 +12,7 @@ from app.models.schemas import DepartmentCreate, DepartmentUpdate, DepartmentRes
 router = APIRouter(tags=["Departments"])
 logger = logging.getLogger(__name__)
 
+@router.get("", response_model=List[DepartmentResponse])
 @router.get("/", response_model=List[DepartmentResponse])
 async def list_departments(
     current_user: dict = Depends(get_current_user),
@@ -36,6 +37,7 @@ async def list_departments(
             return [DepartmentResponse(**d) for d in defaults]
         raise HTTPException(status_code=500, detail="Failed to fetch departments")
 
+@router.post("", response_model=DepartmentResponse)
 @router.post("/", response_model=DepartmentResponse)
 async def create_department(
     dept_data: DepartmentCreate,
@@ -44,19 +46,32 @@ async def create_department(
 ):
     """Admin only. Create a new department."""
     try:
+        # Check if already exists (even if inactive)
+        existing = supabase.table("departments").select("*").eq("name", dept_data.name).execute()
+        if existing.data:
+            # Reactivate and update
+            resp = supabase.table("departments").update({
+                "color": dept_data.color or "#599692",
+                "description": dept_data.description,
+                "is_active": True
+            }).eq("id", existing.data[0]["id"]).execute()
+            return DepartmentResponse(**resp.data[0])
+
         resp = supabase.table("departments").insert({
             "name": dept_data.name,
-            "color": dept_data.color,
+            "color": dept_data.color or "#599692",
             "description": dept_data.description,
+            "is_active": True
         }).execute()
+        
         if not resp.data:
-            raise HTTPException(status_code=500, detail="Failed to create department")
+            raise HTTPException(status_code=400, detail="Failed to create department")
         return DepartmentResponse(**resp.data[0])
+    except HTTPException:
+        raise
     except Exception as e:
-        if "duplicate key" in str(e).lower() or "unique" in str(e).lower():
-            raise HTTPException(status_code=409, detail=f"Department '{dept_data.name}' already exists")
         logger.error(f"Error creating department: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create department: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/{department_id}", response_model=DepartmentResponse)
 async def update_department(
@@ -90,9 +105,9 @@ async def delete_department(
     current_user: dict = Depends(require_admin),
     supabase = Depends(get_supabase_client)
 ):
-    """Admin only. Soft-delete a department."""
+    """Admin only. Delete a department."""
     try:
-        supabase.table("departments").update({"is_active": False}).eq("id", department_id).execute()
+        supabase.table("departments").delete().eq("id", department_id).execute()
         return MessageResponse(message="Department deleted successfully", success=True)
     except Exception as e:
         logger.error(f"Error deleting department: {e}")
