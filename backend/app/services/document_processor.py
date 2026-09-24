@@ -45,6 +45,12 @@ class DocumentProcessor:
         doc_name = metadata.get("title", metadata.get("filename", "Document"))
         department = metadata.get("department", "All")
         tags = metadata.get("tags", [])
+        allowed_depts = metadata.get("allowed_departments", ["All"])
+        if isinstance(allowed_depts, list):
+            allowed_str = ",".join(allowed_depts)
+        else:
+            allowed_str = str(allowed_depts)
+        is_public = ("All" in allowed_str) or ("General" in allowed_str) or (department in ["All", "General"]) or (not allowed_str)
         raw_docs = []
         total_extracted_chars = 0
 
@@ -52,7 +58,8 @@ class DocumentProcessor:
             doc = fitz.open(stream=file_bytes, filetype="pdf")
             logger.info(f"Processing Text PDF '{doc_name}' ({document_id}) with {len(doc)} pages")
 
-            for page_num in range(len(doc)):
+            page_count = len(doc)
+            for page_num in range(page_count):
                 try:
                     page = doc.load_page(page_num)
                     text = page.get_text("text")
@@ -70,6 +77,8 @@ class DocumentProcessor:
                                     "page": page_num + 1,
                                     "page_number": page_num + 1,
                                     "department": department,
+                                    "allowed_departments": allowed_str,
+                                    "is_public": is_public,
                                     "tags": tags,
                                 }
                             )
@@ -80,7 +89,7 @@ class DocumentProcessor:
             doc.close()
 
             # Auto-detection fallback: if extracted text is very short/blank across all pages, fallback to OCR
-            if total_extracted_chars < 50 and len(doc) > 0:
+            if total_extracted_chars < 50 and page_count > 0:
                 logger.info(f"Detected scanned PDF with insufficient digital text ({total_extracted_chars} chars). Falling back to Vision OCR.")
                 return self.process_scanned_pdf(file_bytes, document_id, metadata)
 
@@ -102,6 +111,12 @@ class DocumentProcessor:
         doc_name = metadata.get("title", metadata.get("filename", "Document"))
         department = metadata.get("department", "All")
         tags = metadata.get("tags", [])
+        allowed_depts = metadata.get("allowed_departments", ["All"])
+        if isinstance(allowed_depts, list):
+            allowed_str = ",".join(allowed_depts)
+        else:
+            allowed_str = str(allowed_depts)
+        is_public = ("All" in allowed_str) or ("General" in allowed_str) or (department in ["All", "General"]) or (not allowed_str)
         ocr_docs = []
 
         try:
@@ -136,6 +151,8 @@ class DocumentProcessor:
                                     "page": page_num + 1,
                                     "page_number": page_num + 1,
                                     "department": department,
+                                    "allowed_departments": allowed_str,
+                                    "is_public": is_public,
                                     "tags": tags,
                                     "is_ocr": True,
                                 }
@@ -163,7 +180,12 @@ class DocumentProcessor:
         """Extract digital text AND extract embedded charts/diagrams with Gemini Vision captioning."""
         doc_name = metadata.get("title", metadata.get("filename", "Document"))
         department = metadata.get("department", "All")
-        tags = metadata.get("tags", [])
+        allowed_depts = metadata.get("allowed_departments", ["All"])
+        if isinstance(allowed_depts, list):
+            allowed_str = ",".join(allowed_depts)
+        else:
+            allowed_str = str(allowed_depts)
+        is_public = ("All" in allowed_str) or ("General" in allowed_str) or (department in ["All", "General"]) or (not allowed_str)
 
         # 1. Extract digital text chunks
         text_chunks = self.process_text_pdf(file_bytes, document_id, metadata)
@@ -212,6 +234,8 @@ class DocumentProcessor:
                                         "page": page_num + 1,
                                         "page_number": page_num + 1,
                                         "department": department,
+                                        "allowed_departments": allowed_str,
+                                        "is_public": is_public,
                                         "tags": tags,
                                         "is_figure_caption": True,
                                     }
@@ -244,6 +268,12 @@ class DocumentProcessor:
         doc_name = metadata.get("title", metadata.get("filename", "Document"))
         department = metadata.get("department", "All")
         tags = metadata.get("tags", [])
+        allowed_depts = metadata.get("allowed_departments", ["All"])
+        if isinstance(allowed_depts, list):
+            allowed_str = ",".join(allowed_depts)
+        else:
+            allowed_str = str(allowed_depts)
+        is_public = ("All" in allowed_str) or ("General" in allowed_str) or (department in ["All", "General"]) or (not allowed_str)
 
         try:
             cleaned_text = self.clean_text(file_content)
@@ -259,6 +289,8 @@ class DocumentProcessor:
                     "page": 1,
                     "page_number": 1,
                     "department": department,
+                    "allowed_departments": allowed_str,
+                    "is_public": is_public,
                     "tags": tags,
                 }
             )

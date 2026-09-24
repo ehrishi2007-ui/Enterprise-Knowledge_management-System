@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { ROLE_CONFIG } from '../../lib/constants';
 import { Menu, Search, Sun, Moon, Sparkles } from 'lucide-react';
 
 export default function TopBar({ onMenuClick, pageTitle }) {
@@ -80,7 +81,7 @@ export default function TopBar({ onMenuClick, pageTitle }) {
               {user?.display_name || 'Guest'}
             </span>
             <span className="text-[10px] uppercase font-bold text-teal leading-tight mt-0.5">
-              {user?.role || 'User'}
+              {ROLE_CONFIG[user?.role]?.label || user?.role || 'User'}
             </span>
           </div>
           <div className="w-8 h-8 rounded-full bg-teal text-white flex items-center justify-center font-bold text-xs shadow-sm">

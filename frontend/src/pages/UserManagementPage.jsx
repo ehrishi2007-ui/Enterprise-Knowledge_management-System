@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../lib/api';
 import { Button, Card, Badge, Modal, EmptyState, LoadingSpinner, Table } from '../components/ui';
 import { useDepartments } from '../hooks/useDepartments';
-import { ROLES } from '../lib/constants';
+import { ROLES, ROLE_CONFIG } from '../lib/constants';
 import { UserPlus, Edit2, Trash2, Shield, Users, CheckCircle2, XCircle, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -196,8 +196,11 @@ export default function UserManagementPage() {
       header: 'Role',
       accessor: 'role',
       render: (u) => (
-        <Badge color={u.role === 'admin' ? 'teal' : 'gray'} size="sm">
-          {u.role === 'admin' ? 'Admin' : 'Member'}
+        <Badge 
+          color={ROLE_CONFIG[u.role]?.color || 'teal'} 
+          size="sm"
+        >
+          {ROLE_CONFIG[u.role]?.label || u.role}
         </Badge>
       )
     },
@@ -296,7 +299,7 @@ export default function UserManagementPage() {
             >
               <option value="All">All Roles</option>
               {ROLES.map((r) => (
-                <option key={r} value={r} className="capitalize">{r}</option>
+                <option key={r} value={r}>{ROLE_CONFIG[r]?.label || r}</option>
               ))}
             </select>
           </div>
@@ -415,7 +418,7 @@ export default function UserManagementPage() {
                 className="input-field text-xs py-2"
               >
                 {ROLES.map((r) => (
-                  <option key={r} value={r} className="capitalize">{r}</option>
+                  <option key={r} value={r}>{ROLE_CONFIG[r]?.label || r}</option>
                 ))}
               </select>
             </div>
@@ -479,7 +482,7 @@ export default function UserManagementPage() {
                 className="input-field text-xs py-2"
               >
                 {ROLES.map((r) => (
-                  <option key={r} value={r} className="capitalize">{r}</option>
+                  <option key={r} value={r}>{ROLE_CONFIG[r]?.label || r}</option>
                 ))}
               </select>
             </div>

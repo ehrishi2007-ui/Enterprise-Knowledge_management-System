@@ -6,3 +6,4 @@ export { default as Table } from './Table';
 export { default as LoadingSpinner } from './LoadingSpinner';
 export { default as EmptyState } from './EmptyState';
 export { default as TabSwitcher } from './TabSwitcher';
+export { default as DocumentPreviewModal } from './DocumentPreviewModal';

@@ -16,6 +16,7 @@ class UserInfo(BaseModel):
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
     conversation_id: Optional[UUID] = None
+    department: Optional[str] = None
 
 class SourceCitation(BaseModel):
     document_id: Optional[str] = None

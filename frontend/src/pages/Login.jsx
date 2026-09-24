@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { 
   Mail, Lock, LogIn, AlertCircle, Shield, User, ArrowRight, 
-  GraduationCap, Sparkles, CheckCircle2, Sun, Moon 
+  GraduationCap, Sparkles, CheckCircle2, Sun, Moon, BookOpen, Briefcase 
 } from 'lucide-react';
 import { Button } from '../components/ui';
 
@@ -132,19 +132,37 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => handleQuickDemo('admin')}
-                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold bg-teal text-white hover:bg-teal-500 shadow-sm transition-all"
+                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold bg-teal text-white hover:bg-teal-500 shadow-sm transition-all"
               >
-                <Shield size={14} />
-                <span>Admin Demo</span>
+                <Shield size={13} />
+                <span>Admin</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleQuickDemo('lecturer')}
+                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold bg-purple-600/90 text-white hover:bg-purple-600 shadow-sm transition-all"
+              >
+                <BookOpen size={13} />
+                <span>Lecturer</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleQuickDemo('student')}
+                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold bg-blue-600/90 text-white hover:bg-blue-600 shadow-sm transition-all"
+              >
+                <GraduationCap size={13} />
+                <span>Student</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleQuickDemo('employee')}
-                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] hover:border-teal transition-all"
+                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] hover:border-teal transition-all"
               >
-                <User size={14} />
-                <span>Staff/Student Demo</span>
+                <Briefcase size={13} />
+                <span>Employee</span>
               </button>
             </div>
           </div>
@@ -156,33 +174,31 @@ export default function Login() {
             </span>
           </div>
 
-          {/* Admin / Employee Selector */}
-          <div className="grid grid-cols-2 gap-2 p-1 bg-[var(--color-surface-alt)] rounded-lg border border-[var(--color-border)]">
-            <button
-              type="button"
-              onClick={() => setRoleMode('admin')}
-              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-md text-xs font-medium transition-all ${
-                roleMode === 'admin'
-                  ? 'bg-[var(--color-surface)] text-teal font-semibold shadow-sm'
-                  : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
-              }`}
-            >
-              <Shield size={14} />
-              <span>Administrator</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setRoleMode('employee')}
-              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-md text-xs font-medium transition-all ${
-                roleMode === 'employee'
-                  ? 'bg-[var(--color-surface)] text-teal font-semibold shadow-sm'
-                  : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
-              }`}
-            >
-              <User size={14} />
-              <span>Staff / Member</span>
-            </button>
+          {/* Role Mode Selector */}
+          <div className="grid grid-cols-4 gap-1 p-1 bg-[var(--color-surface-alt)] rounded-lg border border-[var(--color-border)]">
+            {[
+              { id: 'admin', label: 'Admin', icon: Shield },
+              { id: 'lecturer', label: 'Lecturer', icon: BookOpen },
+              { id: 'student', label: 'Student', icon: GraduationCap },
+              { id: 'employee', label: 'Employee', icon: Briefcase },
+            ].map(r => {
+              const Icon = r.icon;
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setRoleMode(r.id)}
+                  className={`flex items-center justify-center gap-1 py-1.5 px-1.5 rounded-md text-[11px] font-medium transition-all ${
+                    roleMode === r.id
+                      ? 'bg-[var(--color-surface)] text-teal font-semibold shadow-sm'
+                      : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
+                  }`}
+                >
+                  <Icon size={12} />
+                  <span>{r.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           {error && (
@@ -206,7 +222,11 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="input-field pl-9 text-sm"
-                  placeholder={roleMode === 'admin' ? 'admin@demo.org' : 'member@demo.org'}
+                  placeholder={
+                    roleMode === 'admin' ? 'admin@demo.org' :
+                    roleMode === 'lecturer' ? 'lecturer@demo.edu' :
+                    roleMode === 'student' ? 'student@demo.edu' : 'employee@demo.org'
+                  }
                 />
               </div>
             </div>
@@ -239,7 +259,11 @@ export default function Login() {
                 <span>Signing in...</span>
               ) : (
                 <>
-                  <span>Sign In as {roleMode === 'admin' ? 'Administrator' : 'Staff / Member'}</span>
+                  <span>Sign In as {
+                    roleMode === 'admin' ? 'Administrator' :
+                    roleMode === 'lecturer' ? 'Lecturer / Faculty' :
+                    roleMode === 'student' ? 'Student' : 'Staff / Member'
+                  }</span>
                   <ArrowRight size={16} />
                 </>
               )}

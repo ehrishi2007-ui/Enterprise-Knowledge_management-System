@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { ROLE_CONFIG } from '../../lib/constants';
 import { 
   LayoutDashboard, Users, FileText, 
   Settings, Bot, Search, BookOpen, Bookmark, LogOut, 
@@ -91,7 +92,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
               <p className="text-sm font-medium text-white truncate">{user?.display_name || 'User'}</p>
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] uppercase tracking-wider text-teal-300 font-bold bg-teal/15 px-1.5 py-0.5 rounded">
-                  {user?.role === 'admin' ? 'Admin' : 'Member'}
+                  {ROLE_CONFIG[user?.role]?.label || user?.role || 'Member'}
                 </span>
                 {user?.department && (
                   <span className="text-[10px] text-slate2 truncate">

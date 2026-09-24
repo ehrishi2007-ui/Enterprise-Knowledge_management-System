@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import api, { uploadApi } from '../lib/api';
-import { Button, Card, Badge, Modal, TabSwitcher, EmptyState, LoadingSpinner, Table } from '../components/ui';
+import { Button, Card, Badge, Modal, TabSwitcher, EmptyState, LoadingSpinner, Table, DocumentPreviewModal } from '../components/ui';
 import { useDepartments } from '../hooks/useDepartments';
 import { 
   Search, Upload, Edit, Trash2, FileText, CheckCircle2, 
-  AlertCircle, Layers, Shield, Clock, FileUp, Sparkles
+  AlertCircle, Layers, Shield, Clock, FileUp, Sparkles, Eye
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -26,6 +26,7 @@ export default function DocumentManagementPage() {
   const [tagModalOpen, setTagModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState(null);
+  const [previewDoc, setPreviewDoc] = useState(null);
   
   // Tag edit form state
   const [editTags, setEditTags] = useState('');
@@ -300,6 +301,13 @@ export default function DocumentManagementPage() {
       accessor: 'actions',
       render: (doc) => (
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => setPreviewDoc(doc)}
+            className="p-1.5 rounded hover:bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] hover:text-teal transition-colors"
+            title="Preview PDF / Document"
+          >
+            <Eye size={14} />
+          </button>
           <button
             onClick={() => openTagModal(doc)}
             className="p-1.5 rounded hover:bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] hover:text-teal transition-colors"
@@ -632,6 +640,13 @@ export default function DocumentManagementPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Document PDF/Text Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={!!previewDoc}
+        onClose={() => setPreviewDoc(null)}
+        doc={previewDoc}
+      />
     </div>
   );
 }

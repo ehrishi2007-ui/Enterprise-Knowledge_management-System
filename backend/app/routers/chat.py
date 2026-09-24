@@ -43,8 +43,12 @@ async def ask_question(
         history = history_resp.data[::-1] if history_resp.data else [] # reverse to chronological
         
         # Call RAG pipeline (returns dict with answer, sources, response_time_ms)
-        # Admins have access to all documents across all departments
-        dept_filter = "All" if current_user.get("role") == "admin" else current_user.get("department")
+        # Use user-selected department filter if provided; otherwise search all accessible documents
+        if request.department and request.department != "All":
+            dept_filter = request.department
+        else:
+            dept_filter = "All"
+            
         rag_result = rag_pipeline.ask(
             question=request.question,
             conversation_history=history,

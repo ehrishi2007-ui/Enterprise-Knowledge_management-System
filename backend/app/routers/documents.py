@@ -1,11 +1,11 @@
 import logging
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query, Response
 from pydantic import BaseModel
 
 from app.config import settings
-from app.middleware.auth import get_current_user, require_admin
+from app.middleware.auth import get_current_user, get_current_user_flexible, require_admin
 from app.dependencies import get_supabase_client
 from app.models.schemas import DocumentResponse, DocumentTagsUpdate, MessageResponse
 from app.services.document_processor import document_processor
@@ -187,6 +187,70 @@ async def get_document(
     except Exception as e:
         logger.error(f"Error fetching document: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch document")
+
+@router.get("/{document_id}/file")
+async def get_document_file(
+    document_id: str,
+    download: bool = Query(False),
+    current_user: dict = Depends(get_current_user_flexible),
+    supabase = Depends(get_supabase_client)
+):
+    """Securely stream/serve document file (PDF, TXT) for inline browser preview or download."""
+    try:
+        resp = supabase.table("documents").select("*").eq("id", document_id).execute()
+        if not resp.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+            
+        doc = resp.data[0]
+        
+        # Access control
+        if current_user.get("role") != "admin":
+            user_dept = current_user.get("department")
+            allowed = doc.get("allowed_departments") or ["All"]
+            doc_dept = doc.get("department")
+            is_permitted = (
+                "All" in allowed or 
+                doc_dept in ["All", "General", None] or 
+                (user_dept and user_dept in allowed) or
+                (user_dept and user_dept == doc_dept)
+            )
+            if not is_permitted:
+                raise HTTPException(status_code=403, detail="Access denied to this document")
+                
+        storage_path = doc.get("storage_path") or f"{document_id}/{doc['filename']}"
+        file_bytes = supabase.storage.from_("documents").download(storage_path)
+        
+        filename = doc.get("filename", "document.pdf")
+        safe_filename = filename.replace('"', '\\"')
+        
+        if filename.lower().endswith(".pdf"):
+            media_type = "application/pdf"
+        elif filename.lower().endswith(".txt"):
+            media_type = "text/plain; charset=utf-8"
+        else:
+            media_type = "application/octet-stream"
+            
+        disposition = "attachment" if download else "inline"
+        headers = {
+            "Content-Disposition": f'{disposition}; filename="{safe_filename}"',
+            "Cache-Control": "public, max-age=3600"
+        }
+        
+        return Response(content=file_bytes, media_type=media_type, headers=headers)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving document file: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to serve file: {str(e)}")
+
+@router.get("/{document_id}/download")
+async def download_document_file(
+    document_id: str,
+    current_user: dict = Depends(get_current_user_flexible),
+    supabase = Depends(get_supabase_client)
+):
+    """Direct download endpoint with attachment header."""
+    return await get_document_file(document_id, download=True, current_user=current_user, supabase=supabase)
 
 @router.delete("/{document_id}", response_model=MessageResponse)
 async def delete_document(

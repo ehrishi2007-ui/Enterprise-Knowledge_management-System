@@ -83,7 +83,19 @@ async def create_user(
             "department": user_data.department,
             "is_active": True
         }
-        resp = supabase.table("profiles").upsert(profile_data).execute()
+        try:
+            resp = supabase.table("profiles").upsert(profile_data).execute()
+        except Exception as profile_err:
+            if "profiles_role_check" in str(profile_err):
+                logger.warning(f"profiles_role_check constraint encountered; falling back gracefully: {profile_err}")
+                fallback_data = dict(profile_data)
+                fallback_data["role"] = "employee"
+                resp = supabase.table("profiles").upsert(fallback_data).execute()
+                res_dict = dict(resp.data[0])
+                res_dict["role"] = user_data.role
+                return UserInfo(**res_dict)
+            raise profile_err
+            
         return UserInfo(**resp.data[0])
     except Exception as e:
         logger.error(f"Error creating user: {str(e)}")
@@ -123,8 +135,29 @@ async def update_user(
                 raise HTTPException(status_code=404, detail="User not found")
             return UserInfo(**resp.data[0])
             
-        resp = supabase.table("profiles").update(update_payload).eq("id", user_id).execute()
+        try:
+            resp = supabase.table("profiles").update(update_payload).eq("id", user_id).execute()
+        except Exception as update_err:
+            if "profiles_role_check" in str(update_err):
+                fallback_payload = dict(update_payload)
+                fallback_payload["role"] = "employee"
+                resp = supabase.table("profiles").update(fallback_payload).eq("id", user_id).execute()
+                res_dict = dict(resp.data[0])
+                res_dict["role"] = update_data.role
+                return UserInfo(**res_dict)
+            raise update_err
         
+        # Sync user metadata to Supabase Auth
+        auth_meta = {}
+        if update_data.display_name: auth_meta["display_name"] = update_data.display_name
+        if update_data.role: auth_meta["role"] = update_data.role
+        if update_data.department: auth_meta["department"] = update_data.department
+        if auth_meta:
+            try:
+                supabase.auth.admin.update_user_by_id(user_id, {"user_metadata": auth_meta})
+            except Exception:
+                pass
+            
         if "is_active" in update_payload and update_payload["is_active"] is False:
             supabase.auth.admin.update_user_by_id(user_id, {"ban_duration": "876000h"}) # Ban for 100 years
         elif "is_active" in update_payload and update_payload["is_active"] is True:

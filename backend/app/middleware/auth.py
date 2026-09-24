@@ -1,11 +1,12 @@
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from app.config import settings
 from app.dependencies import get_supabase_client
 import uuid
+from typing import Optional
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 def verify_token(token: str) -> dict:
     """Decodes and verifies a Supabase JWT."""
@@ -24,22 +25,54 @@ def verify_token(token: str) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    """Extracts the token, verifies it, and retrieves the user profile from Supabase."""
-    token = credentials.credentials
+def get_user_from_raw_token(token: str) -> dict:
+    """Helper to authenticate and load user profile given a raw token string."""
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-    # Development demo token support
+    # Development demo token support (supports admin, lecturer, student, employee, staff, etc.)
     if settings.ENVIRONMENT == "development" and token.startswith("demo-token"):
-        is_employee = "employee" in token.lower()
-        demo_id = "00000000-0000-0000-0000-000000000002" if is_employee else "00000000-0000-0000-0000-000000000001"
-        return {
-            "id": demo_id,
-            "email": "employee@demo.org" if is_employee else "admin@demo.org",
-            "role": "employee" if is_employee else "admin",
-            "department": "Engineering" if is_employee else "Operations",
-            "display_name": "Alex Morgan" if is_employee else "Rachel Collins",
-            "is_active": True
-        }
+        token_lower = token.lower()
+        if "admin" in token_lower:
+            return {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "email": "admin@hitam.edu.in",
+                "role": "admin",
+                "department": "Operations",
+                "display_name": "Rachel Collins (Admin)",
+                "is_active": True
+            }
+        elif "lecturer" in token_lower or "faculty" in token_lower:
+            return {
+                "id": "d946a8cb-c9d6-42ef-bbd1-15fb67dffcf7",
+                "email": "lecturer@hitam.edu.in",
+                "role": "lecturer",
+                "department": "Computer Science",
+                "display_name": "Dr. Marcus Vance",
+                "is_active": True
+            }
+        elif "student" in token_lower:
+            return {
+                "id": "deee83ee-5369-4464-862b-7366c5f74b70",
+                "email": "student@hitam.edu.in",
+                "role": "student",
+                "department": "Engineering",
+                "display_name": "Jordan Lee",
+                "is_active": True
+            }
+        else: # Default employee / staff
+            return {
+                "id": "00000000-0000-0000-0000-000000000002",
+                "email": "employee@hitam.edu.in",
+                "role": "employee",
+                "department": "Engineering",
+                "display_name": "Alex Morgan",
+                "is_active": True
+            }
 
     payload = verify_token(token)
     
@@ -94,6 +127,45 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         "display_name": user.get("display_name", ""),
         "is_active": user.get("is_active", True)
     }
+
+def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
+    """Extracts token from Authorization header and retrieves user profile."""
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return get_user_from_raw_token(credentials.credentials)
+
+def get_current_user_flexible(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    token: Optional[str] = Query(None)
+) -> dict:
+    """Extracts token from either Authorization header or ?token= query param (for iframes/direct file streams)."""
+    raw_token = None
+    if credentials and credentials.credentials:
+        raw_token = credentials.credentials
+    elif token:
+        raw_token = token
+    elif "authorization" in request.headers:
+        auth_header = request.headers.get("authorization")
+        if auth_header.startswith("Bearer "):
+            raw_token = auth_header[7:].strip()
+            
+    if not raw_token:
+        # Development fallback: allow demo token in development if query param or header demo
+        if settings.ENVIRONMENT == "development":
+            raw_token = "demo-token-employee"
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated for file access",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            
+    return get_user_from_raw_token(raw_token)
 
 def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
     """Requires the user to have the 'admin' role."""

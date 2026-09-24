@@ -4,9 +4,10 @@ import {
   Bot, Plus, Search, Edit2, Bookmark, Trash2, 
   Check, X, ThumbsUp, ThumbsDown, FileText, Send, 
   Loader2, Copy, Sparkles, ExternalLink, ChevronRight,
-  BookOpen, HelpCircle
+  BookOpen, HelpCircle, Eye
 } from 'lucide-react';
-import { Button, Card, Badge, Modal, EmptyState, LoadingSpinner } from '../components/ui';
+import { Button, Card, Badge, Modal, EmptyState, LoadingSpinner, DocumentPreviewModal } from '../components/ui';
+import { useDepartments } from '../hooks/useDepartments';
 import api from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -16,6 +17,10 @@ export default function ChatPage() {
   
   const initialQuery = searchParams.get('q');
   const initialConversationId = searchParams.get('conversation');
+
+  const { departments } = useDepartments();
+  const [chatDepartment, setChatDepartment] = useState('All');
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   // Left Panel State
   const [conversations, setConversations] = useState([]);
@@ -113,6 +118,9 @@ export default function ChatPage() {
     setAskLoading(true);
     try {
       const payload = { question: q };
+      if (chatDepartment && chatDepartment !== 'All') {
+        payload.department = chatDepartment;
+      }
       if (activeConversationId && activeConversationId !== 'temp') {
         payload.conversation_id = activeConversationId;
       }
@@ -354,8 +362,20 @@ export default function ChatPage() {
             </h2>
           </div>
 
-          {activeConversation && (
-            <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            <select
+              value={chatDepartment}
+              onChange={(e) => setChatDepartment(e.target.value)}
+              className="bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg text-xs px-2.5 py-1 text-[var(--color-text)] focus:outline-none focus:border-teal"
+              title="Filter knowledge base scope"
+            >
+              <option value="All">Scope: All Documents</option>
+              {departments.map((d) => (
+                <option key={d.id || d.name} value={d.name}>{d.name}</option>
+              ))}
+            </select>
+
+            {activeConversation && (
               <button
                 onClick={() => handleToggleBookmark(activeConversation.id)}
                 className={`p-1.5 rounded-lg border border-[var(--color-border)] text-xs font-medium flex items-center gap-1.5 transition-colors ${
@@ -366,8 +386,8 @@ export default function ChatPage() {
                 <Bookmark size={14} className={activeConversation.is_bookmarked ? 'fill-teal' : ''} />
                 <span className="hidden sm:inline">Bookmark</span>
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
         
         {/* Messages Stream */}
@@ -557,6 +577,20 @@ export default function ChatPage() {
             <div>
               <span className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase">Source Document</span>
               <p className="font-semibold text-[var(--color-text)] mt-1">{selectedSource.title || selectedSource.document_title}</p>
+              {selectedSource.document_id && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="w-full mt-2 text-xs flex items-center justify-center gap-1.5"
+                  onClick={() => setPreviewDoc({
+                    id: selectedSource.document_id,
+                    title: selectedSource.title || selectedSource.document_title || 'Document'
+                  })}
+                >
+                  <Eye size={13} className="text-teal" />
+                  <span>Preview Document</span>
+                </Button>
+              )}
             </div>
             {selectedSource.page && (
               <div>
@@ -594,6 +628,13 @@ export default function ChatPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Document PDF/Text Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={!!previewDoc}
+        onClose={() => setPreviewDoc(null)}
+        doc={previewDoc}
+      />
     </div>
   );
 }

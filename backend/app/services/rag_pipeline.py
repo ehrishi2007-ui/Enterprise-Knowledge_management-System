@@ -75,23 +75,40 @@ class RAGPipeline:
             # 1. Fetch AI & RAG settings
             ai_settings = self.get_ai_settings(supabase_client)
             
-            # 2. Build RBAC metadata filter for Chroma
-            where_filter = None
-            if user_department and user_department != "All":
-                where_filter = {
-                    "$or": [
-                        {"department": user_department},
-                        {"department": "All"}
-                    ]
-                }
-            
-            # 3. Retrieve relevant documents using LangChain Chroma
-            logger.info(f"Retrieving top {ai_settings['top_k']} docs with model {ai_settings['model_name']} for question: '{question}'")
-            retrieved_docs = chroma_service.similarity_search(
+            # 2. Retrieve relevant candidates using LangChain Chroma
+            # Retrieve enough candidates to apply accurate permission filtering
+            candidate_k = max(ai_settings["top_k"] * 3, 12)
+            logger.info(f"Retrieving top candidates for user_dept '{user_department}' with model {ai_settings['model_name']} for question: '{question}'")
+            candidate_docs = chroma_service.similarity_search(
                 query=question,
-                k=ai_settings["top_k"],
-                filter=where_filter
+                k=candidate_k
             )
+            
+            # 3. Apply RBAC filtering in Python to prevent Chroma filter syntax dropouts
+            retrieved_docs = []
+            for doc in candidate_docs:
+                meta = doc.metadata or {}
+                doc_dept = meta.get("department", "All")
+                allowed_depts = meta.get("allowed_departments", "All")
+                is_pub = meta.get("is_public", True)
+                
+                # If user is admin or searching All departments
+                if not user_department or user_department == "All":
+                    retrieved_docs.append(doc)
+                else:
+                    # Allowed if public, general, or explicitly matching user's department
+                    allowed_list = [d.strip() for d in allowed_depts.split(",")] if isinstance(allowed_depts, str) else (allowed_depts or [])
+                    is_permitted = (
+                        is_pub or
+                        doc_dept in ["All", "General", user_department] or
+                        "All" in allowed_list or
+                        user_department in allowed_list
+                    )
+                    if is_permitted:
+                        retrieved_docs.append(doc)
+                        
+                if len(retrieved_docs) >= ai_settings["top_k"]:
+                    break
             
             # 4. Extract structured sources for the frontend
             sources = []

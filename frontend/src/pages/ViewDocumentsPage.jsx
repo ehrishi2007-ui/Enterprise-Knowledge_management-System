@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { supabase } from '../lib/supabase';
-import { Button, Card, Badge, EmptyState, LoadingSpinner } from '../components/ui';
+import { Button, Card, Badge, EmptyState, LoadingSpinner, DocumentPreviewModal } from '../components/ui';
 import { useDepartments } from '../hooks/useDepartments';
-import { Search, FileText, ExternalLink, Bot, Download, Filter } from 'lucide-react';
+import { Search, FileText, ExternalLink, Bot, Download, Filter, Eye } from 'lucide-react';
 
 export default function ViewDocumentsPage() {
   const navigate = useNavigate();
@@ -17,6 +17,7 @@ export default function ViewDocumentsPage() {
   const [department, setDepartment] = useState('All');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   const fetchDocuments = async () => {
     try {
@@ -63,22 +64,8 @@ export default function ViewDocumentsPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  const handleView = async (doc) => {
-    if (doc.file_url) {
-      window.open(doc.file_url, '_blank');
-      return;
-    }
-    if (doc.storage_path) {
-      try {
-        const { data } = await supabase.storage.from('documents').createSignedUrl(doc.storage_path, 3600);
-        if (data?.signedUrl) {
-          window.open(data.signedUrl, '_blank');
-          return;
-        }
-      } catch (err) {
-        console.error('Error opening document:', err);
-      }
-    }
+  const handleView = (doc) => {
+    setPreviewDoc(doc);
   };
 
   return (
@@ -198,8 +185,8 @@ export default function ViewDocumentsPage() {
                     className="text-xs px-2.5 py-1"
                     onClick={() => handleView(doc)}
                   >
-                    <ExternalLink size={12} className="mr-1" />
-                    <span>Open</span>
+                    <Eye size={13} className="mr-1 text-teal" />
+                    <span>View</span>
                   </Button>
                 </div>
               </div>
@@ -232,6 +219,17 @@ export default function ViewDocumentsPage() {
           </Button>
         </div>
       )}
+
+      {/* In-App Document & PDF Viewer Modal */}
+      <DocumentPreviewModal
+        isOpen={!!previewDoc}
+        onClose={() => setPreviewDoc(null)}
+        doc={previewDoc}
+        onAskAI={(title) => {
+          setPreviewDoc(null);
+          navigate(`/employee/chat?q=${encodeURIComponent('Tell me about the contents of ' + title)}`);
+        }}
+      />
     </div>
   );
 }
