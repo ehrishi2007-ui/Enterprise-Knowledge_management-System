@@ -26,7 +26,7 @@ class RAGPipeline:
         ai_settings = {
             "system_prompt": DEFAULT_SYSTEM_PROMPT,
             "temperature": settings.DEFAULT_TEMPERATURE,
-            "max_tokens": settings.DEFAULT_MAX_TOKENS,
+            "max_tokens": 4096,
             "top_k": settings.TOP_K_RESULTS,
             "model_name": settings.GEMINI_MODEL
         }
@@ -39,7 +39,7 @@ class RAGPipeline:
                 if "temperature" in settings_map and settings_map["temperature"]:
                     ai_settings["temperature"] = float(settings_map["temperature"])
                 if "max_tokens" in settings_map and settings_map["max_tokens"]:
-                    ai_settings["max_tokens"] = int(settings_map["max_tokens"])
+                    ai_settings["max_tokens"] = max(int(settings_map["max_tokens"]), 4096)
                 if "top_k" in settings_map and settings_map["top_k"]:
                     ai_settings["top_k"] = int(settings_map["top_k"])
                 if "model_name" in settings_map and settings_map["model_name"]:
@@ -47,6 +47,7 @@ class RAGPipeline:
         except Exception as e:
             logger.warning(f"Could not fetch AI settings from database, using defaults: {e}")
             
+        ai_settings["max_tokens"] = max(ai_settings.get("max_tokens", 4096), 4096)
         return ai_settings
 
     def format_context(self, docs) -> str:
@@ -66,7 +67,8 @@ class RAGPipeline:
         question: str,
         conversation_history: List[Dict[str, str]],
         user_department: str,
-        supabase_client
+        supabase_client,
+        user_role: str = "employee"
     ) -> Dict[str, Any]:
         """Execute the LangChain RAG pipeline."""
         start_time = time.time()
@@ -78,34 +80,46 @@ class RAGPipeline:
             # 2. Retrieve relevant candidates using LangChain Chroma
             # Retrieve enough candidates to apply accurate permission filtering
             candidate_k = max(ai_settings["top_k"] * 3, 12)
-            logger.info(f"Retrieving top candidates for user_dept '{user_department}' with model {ai_settings['model_name']} for question: '{question}'")
+            logger.info(f"Retrieving top candidates for user_role '{user_role}', user_dept '{user_department}' with model {ai_settings['model_name']} for question: '{question}'")
             candidate_docs = chroma_service.similarity_search(
                 query=question,
                 k=candidate_k
             )
             
-            # 3. Apply RBAC filtering in Python to prevent Chroma filter syntax dropouts
+            # 3. Apply RBAC (Department + Role) filtering in Python
             retrieved_docs = []
             for doc in candidate_docs:
                 meta = doc.metadata or {}
                 doc_dept = meta.get("department", "All")
                 allowed_depts = meta.get("allowed_departments", "All")
+                allowed_roles = meta.get("allowed_roles", "All")
                 is_pub = meta.get("is_public", True)
+
+                # Check Role Permission
+                allowed_roles_list = [r.strip() for r in allowed_roles.split(",")] if isinstance(allowed_roles, str) else (allowed_roles or [])
+                is_role_permitted = (
+                    user_role == "admin" or
+                    "All" in allowed_roles_list or
+                    user_role in allowed_roles_list or
+                    not allowed_roles_list
+                )
+                if not is_role_permitted:
+                    continue
                 
-                # If user is admin or searching All departments
-                if not user_department or user_department == "All":
-                    retrieved_docs.append(doc)
+                # Check Department Permission
+                if not user_department or user_department == "All" or user_role == "admin":
+                    is_dept_permitted = True
                 else:
-                    # Allowed if public, general, or explicitly matching user's department
                     allowed_list = [d.strip() for d in allowed_depts.split(",")] if isinstance(allowed_depts, str) else (allowed_depts or [])
-                    is_permitted = (
+                    is_dept_permitted = (
                         is_pub or
                         doc_dept in ["All", "General", user_department] or
                         "All" in allowed_list or
                         user_department in allowed_list
                     )
-                    if is_permitted:
-                        retrieved_docs.append(doc)
+                
+                if is_dept_permitted:
+                    retrieved_docs.append(doc)
                         
                 if len(retrieved_docs) >= ai_settings["top_k"]:
                     break

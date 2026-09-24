@@ -2,15 +2,17 @@ import React, { useState, useEffect } from 'react';
 import api, { uploadApi } from '../lib/api';
 import { Button, Card, Badge, Modal, TabSwitcher, EmptyState, LoadingSpinner, Table, DocumentPreviewModal } from '../components/ui';
 import { useDepartments } from '../hooks/useDepartments';
+import { useRoles } from '../hooks/useRoles';
 import { 
   Search, Upload, Edit, Trash2, FileText, CheckCircle2, 
-  AlertCircle, Layers, Shield, Clock, FileUp, Sparkles, Eye
+  AlertCircle, Layers, Shield, Clock, FileUp, Sparkles, Eye, Users
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function DocumentManagementPage() {
   const [activeTab, setActiveTab] = useState('documents');
   const { departments, getDeptColor } = useDepartments();
+  const { roles } = useRoles();
 
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,9 +30,10 @@ export default function DocumentManagementPage() {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [previewDoc, setPreviewDoc] = useState(null);
   
-  // Tag edit form state
+  // Tag & Role edit form state
   const [editTags, setEditTags] = useState('');
   const [editAllowedDepts, setEditAllowedDepts] = useState([]);
+  const [editAllowedRoles, setEditAllowedRoles] = useState([]);
   const [editLoading, setEditLoading] = useState(false);
 
   // Upload state
@@ -42,9 +45,11 @@ export default function DocumentManagementPage() {
     file: null
   });
   const [uploadAllowedDepts, setUploadAllowedDepts] = useState([]);
+  const [uploadAllowedRoles, setUploadAllowedRoles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStage, setUploadStage] = useState('');
+
 
   useEffect(() => {
     if (departments.length > 0 && !uploadData.department) {
@@ -92,6 +97,7 @@ export default function DocumentManagementPage() {
     setSelectedDoc(doc);
     setEditTags((doc.tags || []).join(', '));
     setEditAllowedDepts(doc.allowed_departments || ['All']);
+    setEditAllowedRoles(doc.allowed_roles || ['All']);
     setTagModalOpen(true);
   };
 
@@ -101,13 +107,14 @@ export default function DocumentManagementPage() {
       const tagsArray = editTags.split(',').map(t => t.trim()).filter(Boolean);
       await api.put(`/documents/${selectedDoc.id}/tags`, {
         tags: tagsArray,
-        allowed_departments: editAllowedDepts.length > 0 ? editAllowedDepts : ['All']
+        allowed_departments: editAllowedDepts.length > 0 ? editAllowedDepts : ['All'],
+        allowed_roles: editAllowedRoles.length > 0 ? editAllowedRoles : ['All']
       });
       toast.success('Document updated');
       setTagModalOpen(false);
       fetchDocuments();
     } catch (err) {
-      toast.error('Failed to update tags');
+      toast.error('Failed to update details');
     } finally {
       setEditLoading(false);
     }
@@ -156,11 +163,27 @@ export default function DocumentManagementPage() {
       return;
     }
 
+    let stageTimer = null;
     try {
       setUploading(true);
+      let simulatedProgress = 15;
       setUploadProgress(15);
-      setUploadStage('Uploading document...');
+      setUploadStage('Uploading document to institutional repository...');
       
+      stageTimer = setInterval(() => {
+        simulatedProgress = Math.min(simulatedProgress + Math.floor(Math.random() * 5) + 3, 95);
+        setUploadProgress(simulatedProgress);
+        if (simulatedProgress < 35) {
+          setUploadStage('Uploading document binary file...');
+        } else if (simulatedProgress < 60) {
+          setUploadStage('Extracting text & analyzing document layout structures...');
+        } else if (simulatedProgress < 85) {
+          setUploadStage('Computing 384-dimensional semantic embeddings...');
+        } else {
+          setUploadStage('Indexing chunks into ChromaDB vector knowledge base...');
+        }
+      }, 550);
+
       const formData = new FormData();
       formData.append('title', uploadData.title.trim());
       formData.append('department', uploadData.department || (departments[0]?.name || 'General'));
@@ -171,23 +194,19 @@ export default function DocumentManagementPage() {
       
       const allowedDepts = uploadAllowedDepts.length > 0 ? uploadAllowedDepts : ['All'];
       formData.append('allowed_departments', allowedDepts.join(','));
+
+      const allowedRoles = uploadAllowedRoles.length > 0 ? uploadAllowedRoles : ['All'];
+      formData.append('allowed_roles', allowedRoles.join(','));
+
       formData.append('file', uploadData.file);
 
       await uploadApi.post('/documents/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setUploadProgress(Math.min(percent, 85));
-            if (percent >= 85) {
-              setUploadStage('Indexing document for AI search & questions...');
-            }
-          }
-        }
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
-      
+
+      if (stageTimer) clearInterval(stageTimer);
       setUploadProgress(100);
-      setUploadStage('Done! Document ready for AI questions.');
+      setUploadStage('Done! Document indexed and ready for AI questions.');
       toast.success('Document uploaded and ready!');
 
       setTimeout(() => {
@@ -199,13 +218,15 @@ export default function DocumentManagementPage() {
           file: null
         });
         setUploadAllowedDepts([]);
+        setUploadAllowedRoles([]);
         setUploading(false);
         setUploadProgress(0);
         setUploadStage('');
         setActiveTab('documents');
-      }, 1000);
+      }, 900);
       
     } catch (err) {
+      if (stageTimer) clearInterval(stageTimer);
       const detail = err.response?.data?.detail;
       const message = typeof detail === 'string' ? detail : (err.message || 'Upload failed.');
       toast.error(`Upload error: ${message}`);
@@ -214,6 +235,7 @@ export default function DocumentManagementPage() {
       setUploadStage('');
     }
   };
+
 
   const documentTypes = [
     { value: 'text_only', label: 'Standard Document', desc: 'Digital PDF with selectable text' },
@@ -250,9 +272,38 @@ export default function DocumentManagementPage() {
       )
     },
     {
+      header: 'Visible To (Roles)',
+      accessor: 'allowed_roles',
+      render: (doc) => {
+        const docRoles = doc.allowed_roles || ['All'];
+        const isAll = docRoles.includes('All') || docRoles.length === 0;
+        return (
+          <div className="flex flex-wrap gap-1 max-w-[150px]">
+            {isAll ? (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-medium">
+                All Roles
+              </span>
+            ) : (
+              docRoles.slice(0, 2).map((r) => (
+                <span key={r} className="text-[10px] px-2 py-0.5 rounded-full bg-teal/10 text-teal font-medium capitalize">
+                  {r}
+                </span>
+              ))
+            )}
+            {!isAll && docRoles.length > 2 && (
+              <span className="text-[10px] text-[var(--color-text-secondary)] font-medium self-center">
+                +{docRoles.length - 2}
+              </span>
+            )}
+          </div>
+        );
+      }
+    },
+    {
       header: 'Type',
       accessor: 'content_type',
       render: (doc) => {
+
         const typeLabels = {
           text_only: 'Standard',
           images_only: 'Scanned',
@@ -530,9 +581,9 @@ export default function DocumentManagementPage() {
               </div>
             </div>
 
-            {/* Permissions */}
+            {/* Department Permissions */}
             <div>
-              <label className="label">Who Can View This Document?</label>
+              <label className="label">Who Can View This Document? (By Department)</label>
               <div className="flex flex-wrap gap-2 p-3 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-border)]">
                 {departments.map((dept) => (
                   <label key={dept.id || dept.name} className="flex items-center gap-1.5 text-xs text-[var(--color-text)] cursor-pointer">
@@ -550,7 +601,31 @@ export default function DocumentManagementPage() {
                 ))}
               </div>
               <span className="text-[10px] text-[var(--color-text-secondary)] mt-1 block">
-                Leave unchecked to allow all departments to view this document.
+                Leave unchecked to make visible to all departments.
+              </span>
+            </div>
+
+            {/* Role Permissions */}
+            <div>
+              <label className="label">Who Can View This Document? (By Role)</label>
+              <div className="flex flex-wrap gap-2 p-3 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-border)]">
+                {roles.map((r) => (
+                  <label key={r.role_name} className="flex items-center gap-1.5 text-xs text-[var(--color-text)] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={uploadAllowedRoles.includes(r.role_name)}
+                      onChange={(e) => {
+                        if (e.target.checked) setUploadAllowedRoles([...uploadAllowedRoles, r.role_name]);
+                        else setUploadAllowedRoles(uploadAllowedRoles.filter(item => item !== r.role_name));
+                      }}
+                      className="rounded border-[var(--color-border)] text-teal focus:ring-teal"
+                    />
+                    <span>{r.display_name}</span>
+                  </label>
+                ))}
+              </div>
+              <span className="text-[10px] text-[var(--color-text-secondary)] mt-1 block">
+                Leave unchecked to make visible to all roles (Students, Lecturers, Employees, Staff, etc.).
               </span>
             </div>
 
@@ -599,7 +674,7 @@ export default function DocumentManagementPage() {
             </div>
             <div>
               <label className="label">Allowed Departments</label>
-              <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-3 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-border)]">
+              <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto p-3 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-border)]">
                 {departments.map((dept) => (
                   <label key={dept.id || dept.name} className="flex items-center gap-2 text-xs text-[var(--color-text)] cursor-pointer">
                     <input
@@ -615,7 +690,34 @@ export default function DocumentManagementPage() {
                   </label>
                 ))}
               </div>
+              <span className="text-[10px] text-[var(--color-text-secondary)] mt-1 block">
+                Leave empty or select all to make visible to all departments.
+              </span>
             </div>
+
+            <div>
+              <label className="label">Allowed Roles (Who Can View)</label>
+              <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto p-3 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-border)]">
+                {roles.map((r) => (
+                  <label key={r.role_name} className="flex items-center gap-2 text-xs text-[var(--color-text)] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editAllowedRoles.includes(r.role_name)}
+                      onChange={(e) => {
+                        if (e.target.checked) setEditAllowedRoles([...editAllowedRoles, r.role_name]);
+                        else setEditAllowedRoles(editAllowedRoles.filter(item => item !== r.role_name));
+                      }}
+                      className="rounded border-[var(--color-border)] text-teal focus:ring-teal"
+                    />
+                    <span>{r.display_name}</span>
+                  </label>
+                ))}
+              </div>
+              <span className="text-[10px] text-[var(--color-text-secondary)] mt-1 block">
+                Leave empty or select all to make visible to all roles.
+              </span>
+            </div>
+
             <div className="flex justify-end gap-2 pt-3 border-t border-[var(--color-border)]">
               <Button variant="ghost" size="sm" onClick={() => setTagModalOpen(false)}>Cancel</Button>
               <Button size="sm" onClick={handleSaveTags} loading={editLoading}>
@@ -625,6 +727,7 @@ export default function DocumentManagementPage() {
           </div>
         )}
       </Modal>
+
 
       {/* Delete Confirmation Modal */}
       <Modal isOpen={deleteModalOpen} onClose={() => setDeleteModalOpen(false)} title="Delete Document">

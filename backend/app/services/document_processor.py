@@ -50,6 +50,13 @@ class DocumentProcessor:
             allowed_str = ",".join(allowed_depts)
         else:
             allowed_str = str(allowed_depts)
+            
+        allowed_roles = metadata.get("allowed_roles", ["All"])
+        if isinstance(allowed_roles, list):
+            allowed_roles_str = ",".join(allowed_roles)
+        else:
+            allowed_roles_str = str(allowed_roles)
+
         is_public = ("All" in allowed_str) or ("General" in allowed_str) or (department in ["All", "General"]) or (not allowed_str)
         raw_docs = []
         total_extracted_chars = 0
@@ -78,6 +85,7 @@ class DocumentProcessor:
                                     "page_number": page_num + 1,
                                     "department": department,
                                     "allowed_departments": allowed_str,
+                                    "allowed_roles": allowed_roles_str,
                                     "is_public": is_public,
                                     "tags": tags,
                                 }
@@ -116,6 +124,13 @@ class DocumentProcessor:
             allowed_str = ",".join(allowed_depts)
         else:
             allowed_str = str(allowed_depts)
+            
+        allowed_roles = metadata.get("allowed_roles", ["All"])
+        if isinstance(allowed_roles, list):
+            allowed_roles_str = ",".join(allowed_roles)
+        else:
+            allowed_roles_str = str(allowed_roles)
+
         is_public = ("All" in allowed_str) or ("General" in allowed_str) or (department in ["All", "General"]) or (not allowed_str)
         ocr_docs = []
 
@@ -152,6 +167,7 @@ class DocumentProcessor:
                                     "page_number": page_num + 1,
                                     "department": department,
                                     "allowed_departments": allowed_str,
+                                    "allowed_roles": allowed_roles_str,
                                     "is_public": is_public,
                                     "tags": tags,
                                     "is_ocr": True,
@@ -273,6 +289,13 @@ class DocumentProcessor:
             allowed_str = ",".join(allowed_depts)
         else:
             allowed_str = str(allowed_depts)
+            
+        allowed_roles = metadata.get("allowed_roles", ["All"])
+        if isinstance(allowed_roles, list):
+            allowed_roles_str = ",".join(allowed_roles)
+        else:
+            allowed_roles_str = str(allowed_roles)
+
         is_public = ("All" in allowed_str) or ("General" in allowed_str) or (department in ["All", "General"]) or (not allowed_str)
 
         try:
@@ -290,6 +313,7 @@ class DocumentProcessor:
                     "page_number": 1,
                     "department": department,
                     "allowed_departments": allowed_str,
+                    "allowed_roles": allowed_roles_str,
                     "is_public": is_public,
                     "tags": tags,
                 }

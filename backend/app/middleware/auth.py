@@ -175,3 +175,32 @@ def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
             detail="Administrator privileges required",
         )
     return current_user
+
+def require_upload_permission(
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+) -> dict:
+    """Requires the user to either be an admin or have can_upload permission."""
+    user_role = current_user.get("role", "employee")
+    if user_role == "admin":
+        return current_user
+        
+    try:
+        import json
+        resp = supabase.table("settings").select("value").eq("key", "custom_roles_and_permissions").execute()
+        if resp.data and resp.data[0].get("value"):
+            roles = json.loads(resp.data[0]["value"])
+            for r in roles:
+                if r.get("role_name") == user_role and r.get("can_upload"):
+                    return current_user
+    except Exception:
+        pass
+        
+    # Default built-in permission fallback: lecturer and staff have upload rights by default
+    if user_role in ["lecturer", "staff"]:
+        return current_user
+        
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"Upload privileges required. Your role ('{user_role}') does not have permission to upload documents.",
+    )

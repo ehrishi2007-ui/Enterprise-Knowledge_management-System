@@ -1,3 +1,4 @@
+import json
 import logging
 import uuid
 from pathlib import Path
@@ -6,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from pydantic import BaseModel
 
 from app.config import settings
-from app.middleware.auth import get_current_user, get_current_user_flexible, require_admin
+from app.middleware.auth import get_current_user, get_current_user_flexible, require_admin, require_upload_permission
 from app.dependencies import get_supabase_client
 from app.models.schemas import DocumentResponse, DocumentTagsUpdate, MessageResponse
 from app.services.document_processor import document_processor
@@ -16,6 +17,29 @@ from app.services.chroma_service import chroma_service
 router = APIRouter(tags=["Documents"])
 logger = logging.getLogger(__name__)
 
+def get_doc_roles_map(supabase) -> dict:
+    """Retrieve document -> allowed_roles mapping from settings table."""
+    try:
+        resp = supabase.table("settings").select("value").eq("key", "document_roles_map").execute()
+        if resp.data and resp.data[0].get("value"):
+            return json.loads(resp.data[0]["value"])
+    except Exception as e:
+        logger.warning(f"Failed to fetch document_roles_map: {e}")
+    return {}
+
+def set_doc_roles(supabase, doc_id: str, roles: List[str]):
+    """Persist allowed_roles for a document in the settings table."""
+    try:
+        current_map = get_doc_roles_map(supabase)
+        current_map[str(doc_id)] = roles
+        supabase.table("settings").upsert({
+            "key": "document_roles_map",
+            "value": json.dumps(current_map)
+        }, on_conflict="key").execute()
+    except Exception as e:
+        logger.error(f"Failed to save doc roles for {doc_id}: {e}")
+
+
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
     title: Optional[str] = Form(None),
@@ -23,8 +47,9 @@ async def upload_document(
     content_type: str = Form("text_only"),
     tags: str = Form(""),
     allowed_departments: str = Form(""),
+    allowed_roles: str = Form(""),
     file: UploadFile = File(...),
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_upload_permission),
     supabase = Depends(get_supabase_client)
 ):
     """Upload a PDF/TXT document, process text chunks (Text, OCR Scanned, or Hybrid Combination), and save to Supabase."""
@@ -42,7 +67,7 @@ async def upload_document(
                 detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE_MB}MB."
             )
         
-        # Parse tags & allowed_departments
+        # Parse tags, allowed_departments & allowed_roles
         if isinstance(tags, str):
             tags_list = [t.strip() for t in tags.split(",") if t.strip()]
         elif isinstance(tags, list):
@@ -58,6 +83,18 @@ async def upload_document(
             allowed_depts_list = []
         if not allowed_depts_list:
             allowed_depts_list = ["All"]
+
+        if isinstance(allowed_roles, str):
+            allowed_roles_list = [r.strip() for r in allowed_roles.split(",") if r.strip()]
+        elif isinstance(allowed_roles, list):
+            allowed_roles_list = [r.strip() for item in allowed_roles for r in item.split(",") if r.strip()]
+        else:
+            allowed_roles_list = []
+        if not allowed_roles_list:
+            allowed_roles_list = ["All"]
+
+        # Save document roles to settings mapping
+        set_doc_roles(supabase, document_id, allowed_roles_list)
         
         # Upload file to Supabase storage
         storage_path = f"{document_id}/{file.filename}"
@@ -80,14 +117,15 @@ async def upload_document(
             "processing_status": "processing"
         }
         
-        # Insert into documents table with resilient fallback for demo users
+        # Insert into documents table with resilient fallback for demo users & schema cache
+        db_metadata = {k: v for k, v in metadata.items() if k != "allowed_roles"}
         try:
-            doc_resp = supabase.table("documents").insert(metadata).execute()
+            doc_resp = supabase.table("documents").insert(db_metadata).execute()
         except Exception as insert_err:
-            if "violates foreign key constraint" in str(insert_err) and metadata.get("uploaded_by"):
+            if "violates foreign key constraint" in str(insert_err) and db_metadata.get("uploaded_by"):
                 logger.warning(f"FK violation on uploaded_by, retrying with None: {insert_err}")
-                metadata["uploaded_by"] = None
-                doc_resp = supabase.table("documents").insert(metadata).execute()
+                db_metadata["uploaded_by"] = None
+                doc_resp = supabase.table("documents").insert(db_metadata).execute()
             else:
                 raise insert_err
 
@@ -95,11 +133,15 @@ async def upload_document(
             raise HTTPException(status_code=500, detail="Failed to save document metadata")
             
         # Process document text into LangChain Documents with selected multi-modal mode
+        # Pass allowed_roles in processor metadata for Chroma chunk attribution
+        processor_metadata = dict(metadata)
+        processor_metadata["allowed_roles"] = allowed_roles_list
+
         chunks = document_processor.process_document(
             file_bytes=file_bytes,
             filename=file.filename,
             document_id=document_id,
-            metadata=metadata,
+            metadata=processor_metadata,
             content_type=content_type
         )
         chunk_count = len(chunks)
@@ -114,7 +156,9 @@ async def upload_document(
             "chunk_count": chunk_count
         }).eq("id", document_id).execute()
         
-        return DocumentResponse(**updated_doc_resp.data[0])
+        res_data = updated_doc_resp.data[0]
+        res_data["allowed_roles"] = allowed_roles_list
+        return DocumentResponse(**res_data)
     except Exception as e:
         logger.error(f"Error uploading document: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to upload document: {str(e)}")
@@ -130,7 +174,7 @@ async def list_documents(
     current_user: dict = Depends(get_current_user),
     supabase = Depends(get_supabase_client)
 ):
-    """List documents with filters."""
+    """List documents with filters and RBAC role/department visibility enforcement."""
     try:
         query = supabase.table("documents").select("*")
         
@@ -154,7 +198,24 @@ async def list_documents(
         query = query.range(offset, offset + limit - 1)
         
         resp = query.order("created_at", desc=True).execute()
-        return [DocumentResponse(**doc) for doc in resp.data]
+        
+        roles_map = get_doc_roles_map(supabase)
+        user_role = current_user.get("role", "employee")
+        is_admin = user_role == "admin"
+
+        result_docs = []
+        for doc in resp.data:
+            doc_id_str = str(doc.get("id"))
+            doc_roles = doc.get("allowed_roles") or roles_map.get(doc_id_str) or ["All"]
+            doc["allowed_roles"] = doc_roles
+            
+            # Role access check for non-admins
+            if not is_admin:
+                if "All" not in doc_roles and user_role not in doc_roles:
+                    continue
+            result_docs.append(DocumentResponse(**doc))
+
+        return result_docs
     except Exception as e:
         logger.error(f"Error listing documents: {str(e)}")
         if settings.ENVIRONMENT == "development":
@@ -167,20 +228,27 @@ async def get_document(
     current_user: dict = Depends(get_current_user),
     supabase = Depends(get_supabase_client)
 ):
-    """Get single document details."""
+    """Get single document details with department & role checks."""
     try:
         resp = supabase.table("documents").select("*").eq("id", document_id).execute()
         if not resp.data:
             raise HTTPException(status_code=404, detail="Document not found")
             
         doc = resp.data[0]
+        roles_map = get_doc_roles_map(supabase)
+        doc_roles = doc.get("allowed_roles") or roles_map.get(str(document_id)) or ["All"]
+        doc["allowed_roles"] = doc_roles
         
-        # Access control: check if document is allowed for user's department or 'All'
+        # Access control: check if document is allowed for user's department and role
         if current_user.get("role") != "admin":
             user_dept = current_user.get("department")
+            user_role = current_user.get("role", "employee")
             allowed = doc.get("allowed_departments") or ["All"]
+            
             if "All" not in allowed and (not user_dept or user_dept not in allowed):
-                raise HTTPException(status_code=403, detail="Access denied")
+                raise HTTPException(status_code=403, detail="Access denied: Department not authorized")
+            if "All" not in doc_roles and user_role not in doc_roles:
+                raise HTTPException(status_code=403, detail="Access denied: Role not authorized")
                 
         return DocumentResponse(**doc)
     except HTTPException:
@@ -203,19 +271,27 @@ async def get_document_file(
             raise HTTPException(status_code=404, detail="Document not found")
             
         doc = resp.data[0]
+        roles_map = get_doc_roles_map(supabase)
+        doc_roles = doc.get("allowed_roles") or roles_map.get(str(document_id)) or ["All"]
         
         # Access control
         if current_user.get("role") != "admin":
             user_dept = current_user.get("department")
+            user_role = current_user.get("role", "employee")
             allowed = doc.get("allowed_departments") or ["All"]
             doc_dept = doc.get("department")
-            is_permitted = (
+            
+            is_dept_permitted = (
                 "All" in allowed or 
                 doc_dept in ["All", "General", None] or 
                 (user_dept and user_dept in allowed) or
                 (user_dept and user_dept == doc_dept)
             )
-            if not is_permitted:
+            is_role_permitted = (
+                "All" in doc_roles or
+                user_role in doc_roles
+            )
+            if not (is_dept_permitted and is_role_permitted):
                 raise HTTPException(status_code=403, detail="Access denied to this document")
                 
         storage_path = doc.get("storage_path") or f"{document_id}/{doc['filename']}"
@@ -279,6 +355,18 @@ async def delete_document(
             
         # Delete from DB
         supabase.table("documents").delete().eq("id", document_id).execute()
+
+        # Remove from document_roles_map
+        roles_map = get_doc_roles_map(supabase)
+        if str(document_id) in roles_map:
+            roles_map.pop(str(document_id), None)
+            try:
+                supabase.table("settings").upsert({
+                    "key": "document_roles_map",
+                    "value": json.dumps(roles_map)
+                }, on_conflict="key").execute()
+            except Exception:
+                pass
         
         return MessageResponse(message="Document deleted successfully", success=True)
     except HTTPException:
@@ -294,7 +382,7 @@ async def update_tags(
     current_user: dict = Depends(require_admin),
     supabase = Depends(get_supabase_client)
 ):
-    """Admin only. Update tags and allowed_departments."""
+    """Admin only. Update tags, allowed_departments, and allowed_roles."""
     try:
         update_payload = {}
         if update_data.tags is not None:
@@ -302,19 +390,29 @@ async def update_tags(
         if update_data.allowed_departments is not None:
             update_payload["allowed_departments"] = update_data.allowed_departments
             
+        if update_data.allowed_roles is not None:
+            set_doc_roles(supabase, document_id, update_data.allowed_roles)
+
         if not update_payload:
             resp = supabase.table("documents").select("*").eq("id", document_id).execute()
             if not resp.data:
                 raise HTTPException(status_code=404, detail="Document not found")
-            return DocumentResponse(**resp.data[0])
+            doc = resp.data[0]
+            roles_map = get_doc_roles_map(supabase)
+            doc["allowed_roles"] = doc.get("allowed_roles") or update_data.allowed_roles or roles_map.get(str(document_id)) or ["All"]
+            return DocumentResponse(**doc)
             
         resp = supabase.table("documents").update(update_payload).eq("id", document_id).execute()
         if not resp.data:
             raise HTTPException(status_code=404, detail="Document not found")
             
-        return DocumentResponse(**resp.data[0])
+        doc = resp.data[0]
+        roles_map = get_doc_roles_map(supabase)
+        doc["allowed_roles"] = doc.get("allowed_roles") or update_data.allowed_roles or roles_map.get(str(document_id)) or ["All"]
+        return DocumentResponse(**doc)
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error updating document tags: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to update document")
+

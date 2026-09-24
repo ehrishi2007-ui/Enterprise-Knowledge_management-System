@@ -6,6 +6,8 @@ from app.middleware.auth import get_current_user
 from app.dependencies import get_supabase_client
 from app.models.schemas import SearchResponse, SearchResult
 from app.services.chroma_service import chroma_service
+from app.routers.documents import get_doc_roles_map
+
 
 router = APIRouter(tags=["Search"])
 logger = logging.getLogger(__name__)
@@ -55,12 +57,21 @@ async def search_documents(
                 doc_title = doc.metadata.get("title", doc.metadata.get("document_name", "Untitled Document"))
                 doc_dept = doc.metadata.get("department")
                 doc_tags = doc.metadata.get("tags", [])
+                chunk_roles = doc.metadata.get("allowed_roles", "All")
+                allowed_roles_list = [r.strip() for r in chunk_roles.split(",")] if isinstance(chunk_roles, str) else (chunk_roles or [])
+
+                # Check role access for non-admins
+                if not is_admin:
+                    user_role = current_user.get("role", "employee")
+                    if "All" not in allowed_roles_list and user_role not in allowed_roles_list and allowed_roles_list:
+                        continue
                 
                 # Deduplicate by document if multiple chunks match
                 dedup_key = f"{doc_id}_{doc_title}"
                 if dedup_key in seen_docs:
                     continue
                 seen_docs.add(dedup_key)
+
 
                 # Ensure tags match filter if specified
                 if tags:
@@ -94,8 +105,15 @@ async def search_documents(
                 query = query.contains("tags", tag_list)
                 
             resp = query.limit(limit).execute()
+            roles_map = get_doc_roles_map(supabase)
+            user_role = current_user.get("role", "employee")
             
             for doc in resp.data:
+                doc_roles = doc.get("allowed_roles") or roles_map.get(str(doc["id"])) or ["All"]
+                if not is_admin:
+                    if "All" not in doc_roles and user_role not in doc_roles:
+                        continue
+
                 results.append(SearchResult(
                     id=doc["id"],
                     document_id=doc["id"],
@@ -108,6 +126,7 @@ async def search_documents(
                     relevance_score=1.0,
                     created_at=doc.get("created_at")
                 ))
+
                 
         return SearchResponse(query=q, results=results, total_count=len(results), search_type=search_type)
     except Exception as e:

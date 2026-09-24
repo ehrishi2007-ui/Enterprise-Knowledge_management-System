@@ -65,6 +65,7 @@ class DocumentResponse(BaseModel):
     tags: List[str] = []
     uploaded_by: Optional[UUID] = None
     allowed_departments: List[str] = ["All"]
+    allowed_roles: List[str] = ["All"]
     processing_status: str = "pending"
     chunk_count: int = 0
     created_at: Optional[datetime] = None
@@ -72,6 +73,7 @@ class DocumentResponse(BaseModel):
 class DocumentTagsUpdate(BaseModel):
     tags: List[str] = Field(..., description="New list of tags")
     allowed_departments: Optional[List[str]] = None
+    allowed_roles: Optional[List[str]] = None
 
 # === Search ===
 class SearchResult(BaseModel):
@@ -174,6 +176,40 @@ class DepartmentResponse(BaseModel):
     description: Optional[str] = None
     is_active: bool = True
     created_at: Optional[datetime] = None
+
+# === Roles & Permissions ===
+class RoleCreate(BaseModel):
+    role_name: str = Field(..., min_length=2, max_length=50)
+    display_name: str = Field(..., min_length=2, max_length=100)
+    description: Optional[str] = None
+    can_upload: bool = False
+    can_delete: bool = False
+    can_manage_users: bool = False
+    can_manage_departments: bool = False
+    can_manage_settings: bool = False
+    color: str = "teal"
+
+class RolePermissionUpdate(BaseModel):
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+    can_upload: Optional[bool] = None
+    can_delete: Optional[bool] = None
+    can_manage_users: Optional[bool] = None
+    can_manage_departments: Optional[bool] = None
+    can_manage_settings: Optional[bool] = None
+    color: Optional[str] = None
+
+class RolePermissionResponse(BaseModel):
+    role_name: str
+    display_name: str
+    description: Optional[str] = None
+    can_upload: bool = False
+    can_delete: bool = False
+    can_manage_users: bool = False
+    can_manage_departments: bool = False
+    can_manage_settings: bool = False
+    is_custom: bool = True
+    color: str = "teal"
 
 # === Dashboard ===
 class AdminDashboardStats(BaseModel):

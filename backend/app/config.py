@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 50
     TOP_K_RESULTS: int = 5
     DEFAULT_TEMPERATURE: float = 0.3
-    DEFAULT_MAX_TOKENS: int = 1024
+    DEFAULT_MAX_TOKENS: int = 4096
     
     # App
     ENVIRONMENT: str = "development"

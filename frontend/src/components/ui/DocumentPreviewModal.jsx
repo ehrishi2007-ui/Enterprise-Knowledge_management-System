@@ -1,65 +1,154 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
-import { X, Download, ExternalLink, Bot, FileText, Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
-import { Button, Badge } from './index';
+import { X, Download, ExternalLink, Bot, FileText, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Button } from './index';
 import { useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
 
 export default function DocumentPreviewModal({ isOpen, onClose, doc }) {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
   const [textContent, setTextContent] = useState('');
-  const [textError, setTextError] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const activeBlobUrlRef = useRef(null);
 
-  if (!doc) return null;
+  const isPdf = doc?.file_type === 'pdf' || doc?.filename?.toLowerCase().endsWith('.pdf');
+  const isTxt = doc?.file_type === 'txt' || doc?.filename?.toLowerCase().endsWith('.txt');
 
-  const isPdf = doc.file_type === 'pdf' || doc.filename?.toLowerCase().endsWith('.pdf');
-  const isTxt = doc.file_type === 'txt' || doc.filename?.toLowerCase().endsWith('.txt');
-
-  // Retrieve auth token for query param iframe authentication
-  const storedUser = localStorage.getItem('ekms_user');
-  const user = storedUser ? JSON.parse(storedUser) : null;
-  const token = localStorage.getItem('ekms_token') || (user?.role ? `demo-token-${user.role}` : 'demo-token-employee');
-
-  const streamUrl = `/api/documents/${doc.id}/file?token=${encodeURIComponent(token)}`;
-  const downloadUrl = `/api/documents/${doc.id}/download?token=${encodeURIComponent(token)}`;
+  // Clean up object URLs
+  const cleanupBlob = () => {
+    if (activeBlobUrlRef.current) {
+      URL.revokeObjectURL(activeBlobUrlRef.current);
+      activeBlobUrlRef.current = null;
+    }
+    setPdfBlobUrl(null);
+  };
 
   useEffect(() => {
-    if (isOpen && isTxt && doc.id) {
-      setLoading(true);
-      setTextError('');
+    if (!isOpen || !doc?.id) {
+      cleanupBlob();
+      setTextContent('');
+      setErrorMessage('');
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage('');
+    cleanupBlob();
+
+    if (isPdf) {
+      // Fetch PDF as authenticated binary blob
+      api.get(`/documents/${doc.id}/file`, { responseType: 'blob' })
+        .then((res) => {
+          const blob = new Blob([res.data], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+          activeBlobUrlRef.current = url;
+          setPdfBlobUrl(url);
+          setLoading(false);
+        })
+        .catch((err) => {
+          console.error('Failed to load PDF preview:', err);
+          const status = err.response?.status;
+          if (status === 403) {
+            setErrorMessage('Access Denied: Your role does not have permission to view this document.');
+          } else if (status === 404) {
+            setErrorMessage('Document file was not found in institutional storage.');
+          } else {
+            setErrorMessage('Could not load PDF document preview. Please try downloading or opening in a new tab.');
+          }
+          setLoading(false);
+        });
+    } else if (isTxt) {
+      // Fetch text content
       api.get(`/documents/${doc.id}/file`, { responseType: 'text' })
-        .then(res => {
+        .then((res) => {
           setTextContent(res.data);
           setLoading(false);
         })
-        .catch(err => {
-          console.error('Error fetching text file content:', err);
-          setTextError('Unable to load document text content.');
+        .catch((err) => {
+          console.error('Failed to load text preview:', err);
+          const status = err.response?.status;
+          if (status === 403) {
+            setErrorMessage('Access Denied: Your role does not have permission to view this document.');
+          } else {
+            setErrorMessage('Unable to load document text content.');
+          }
           setLoading(false);
         });
     } else {
       setLoading(false);
     }
-  }, [isOpen, doc?.id, isTxt]);
+
+    return () => {
+      cleanupBlob();
+    };
+  }, [isOpen, doc?.id, isPdf, isTxt]);
+
+  if (!doc) return null;
 
   const handleAskAi = () => {
     onClose();
-    navigate(`/employee/chat?q=${encodeURIComponent('Tell me about the contents and key points of ' + doc.title)}`);
+    navigate(`/employee/chat?q=${encodeURIComponent('Tell me about the contents and key points of ' + (doc.title || doc.filename))}`);
   };
 
-  const handleDownload = () => {
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = doc.filename || `${doc.title}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const handleDownload = async () => {
+    try {
+      if (pdfBlobUrl) {
+        const a = document.createElement('a');
+        a.href = pdfBlobUrl;
+        a.download = doc.filename || `${doc.title || 'document'}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+      
+      const res = await api.get(`/documents/${doc.id}/file?download=true`, { responseType: 'blob' });
+      const blob = new Blob([res.data]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.filename || `${doc.title || 'document'}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Download error:', err);
+      // Fallback
+      window.open(`/api/documents/${doc.id}/download`, '_blank');
+    }
   };
 
   const handleOpenNewTab = () => {
-    window.open(streamUrl, '_blank', 'noopener,noreferrer');
+    if (pdfBlobUrl) {
+      window.open(pdfBlobUrl, '_blank');
+    } else {
+      const token = localStorage.getItem('supabase_token') || '';
+      window.open(`/api/documents/${doc.id}/file?token=${encodeURIComponent(token)}`, '_blank');
+    }
+  };
+
+  const handleRetry = () => {
+    setLoading(true);
+    setErrorMessage('');
+    if (isPdf) {
+      api.get(`/documents/${doc.id}/file`, { responseType: 'blob' })
+        .then((res) => {
+          const blob = new Blob([res.data], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+          activeBlobUrlRef.current = url;
+          setPdfBlobUrl(url);
+          setLoading(false);
+        })
+        .catch((err) => {
+          setErrorMessage('Could not load PDF document preview.');
+          setLoading(false);
+        });
+    }
   };
 
   return (
@@ -74,11 +163,11 @@ export default function DocumentPreviewModal({ isOpen, onClose, doc }) {
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
         </Transition.Child>
 
         <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-3 md:p-6 text-center">
+          <div className="flex min-h-full items-center justify-center p-2 sm:p-4 text-center">
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-300"
@@ -88,9 +177,9 @@ export default function DocumentPreviewModal({ isOpen, onClose, doc }) {
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="w-full max-w-5xl transform overflow-hidden rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left align-middle shadow-2xl transition-all flex flex-col max-h-[92vh]">
+              <Dialog.Panel className="w-full max-w-5xl transform overflow-hidden rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left align-middle shadow-2xl transition-all flex flex-col h-[90vh]">
                 {/* Header */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)]">
+                <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)] shrink-0">
                   <div className="flex items-center gap-3 truncate pr-4">
                     <div className="p-2 rounded-xl bg-teal/15 text-teal shrink-0">
                       <FileText size={18} />
@@ -117,7 +206,7 @@ export default function DocumentPreviewModal({ isOpen, onClose, doc }) {
                     </div>
                   </div>
 
-                  {/* Top Action Buttons */}
+                  {/* Header Actions */}
                   <div className="flex items-center gap-2 shrink-0">
                     <Button
                       variant="ghost"
@@ -159,45 +248,67 @@ export default function DocumentPreviewModal({ isOpen, onClose, doc }) {
                 </div>
 
                 {/* Content / Preview Body */}
-                <div className="flex-1 overflow-hidden relative bg-[var(--color-surface)] flex flex-col p-2 md:p-4">
-                  {isPdf ? (
-                    <div className="w-full h-full min-h-[60vh] md:min-h-[72vh] flex flex-col relative rounded-xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface-alt)]">
-                      <iframe
-                        src={`${streamUrl}#toolbar=1&navpanes=0`}
-                        title={doc.title}
-                        className="w-full h-full flex-1 rounded-lg border-0"
-                        onLoad={() => setLoading(false)}
-                      />
-                      <noscript>
-                        <div className="p-8 text-center">
+                <div className="flex-1 overflow-hidden relative bg-[var(--color-surface)] flex flex-col p-2 sm:p-4">
+                  {loading ? (
+                    <div className="flex flex-col items-center justify-center h-full w-full gap-3 text-[var(--color-text-secondary)]">
+                      <Loader2 size={32} className="animate-spin text-teal" />
+                      <span className="text-sm font-medium">Loading document preview...</span>
+                      <span className="text-xs text-[var(--color-text-secondary)]">
+                        Preparing authenticated viewer stream
+                      </span>
+                    </div>
+                  ) : errorMessage ? (
+                    <div className="flex flex-col items-center justify-center h-full w-full gap-3 text-center p-6">
+                      <div className="p-3 rounded-full bg-red-500/10 text-red-400">
+                        <AlertCircle size={32} />
+                      </div>
+                      <h4 className="text-sm font-semibold text-[var(--color-text)]">Preview Unavailable</h4>
+                      <p className="text-xs text-[var(--color-text-secondary)] max-w-md">
+                        {errorMessage}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Button variant="secondary" size="sm" onClick={handleRetry} className="gap-1.5">
+                          <RefreshCw size={13} />
+                          <span>Retry</span>
+                        </Button>
+                        <Button variant="primary" size="sm" onClick={handleDownload} className="gap-1.5">
+                          <Download size={13} />
+                          <span>Download File</span>
+                        </Button>
+                      </div>
+                    </div>
+                  ) : isPdf && pdfBlobUrl ? (
+                    <div className="w-full h-full flex flex-col relative rounded-xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface-alt)]">
+                      <object
+                        data={pdfBlobUrl}
+                        type="application/pdf"
+                        className="w-full h-full flex-1 rounded-lg"
+                      >
+                        <iframe
+                          src={`${pdfBlobUrl}#toolbar=1&navpanes=0`}
+                          title={doc.title}
+                          className="w-full h-full flex-1 rounded-lg border-0"
+                        />
+                        <div className="p-8 text-center flex flex-col items-center justify-center h-full">
+                          <FileText size={40} className="text-teal mb-3" />
                           <p className="text-xs text-[var(--color-text-secondary)] mb-4">
-                            Your browser does not support embedded PDF frames.
+                            Your browser could not embed this PDF natively.
                           </p>
-                          <Button variant="primary" onClick={handleDownload}>
+                          <Button variant="primary" onClick={handleDownload} className="gap-2">
+                            <Download size={14} />
                             Download PDF File
                           </Button>
                         </div>
-                      </noscript>
+                      </object>
                     </div>
                   ) : isTxt ? (
-                    <div className="w-full h-full min-h-[60vh] md:min-h-[72vh] rounded-xl border border-[var(--color-border)] p-4 overflow-y-auto bg-[var(--color-surface-alt)]">
-                      {loading ? (
-                        <div className="flex flex-col items-center justify-center h-64 gap-2 text-[var(--color-text-secondary)]">
-                          <Loader2 size={24} className="animate-spin text-teal" />
-                          <span className="text-xs">Loading text content...</span>
-                        </div>
-                      ) : textError ? (
-                        <div className="p-6 text-center text-xs text-red-500">
-                          {textError}
-                        </div>
-                      ) : (
-                        <pre className="font-mono text-xs text-[var(--color-text)] whitespace-pre-wrap leading-relaxed select-text">
-                          {textContent}
-                        </pre>
-                      )}
+                    <div className="w-full h-full rounded-xl border border-[var(--color-border)] p-4 overflow-y-auto bg-[var(--color-surface-alt)]">
+                      <pre className="font-mono text-xs text-[var(--color-text)] whitespace-pre-wrap leading-relaxed select-text">
+                        {textContent}
+                      </pre>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center p-12 text-center">
+                    <div className="flex flex-col items-center justify-center h-full text-center p-12">
                       <FileText size={48} className="text-teal mb-3" />
                       <h4 className="text-sm font-semibold text-[var(--color-text)]">
                         Preview not available for this file type
@@ -214,10 +325,11 @@ export default function DocumentPreviewModal({ isOpen, onClose, doc }) {
                 </div>
 
                 {/* Footer */}
-                <div className="px-5 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface-alt)] flex items-center justify-between text-xs text-[var(--color-text-secondary)]">
-                  <span>
-                    Indexed for AI queries & search
-                  </span>
+                <div className="px-5 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface-alt)] flex items-center justify-between text-xs text-[var(--color-text-secondary)] shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                    <span>Ready for AI Queries & Semantic Search</span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" size="sm" onClick={onClose}>
                       Close Preview

@@ -53,7 +53,8 @@ async def ask_question(
             question=request.question,
             conversation_history=history,
             user_department=dept_filter,
-            supabase_client=supabase
+            supabase_client=supabase,
+            user_role=current_user.get("role", "employee")
         )
         
         answer_text = rag_result.get("answer", "")
