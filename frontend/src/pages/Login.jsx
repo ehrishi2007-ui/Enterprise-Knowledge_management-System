@@ -132,7 +132,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => handleQuickDemo('admin')}
-                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold bg-teal text-white hover:bg-teal-500 shadow-sm transition-all"
+                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold bg-[#3d3c2a] text-[#e0d8cd] hover:bg-[#4d4b35] shadow-sm transition-all border border-[#3d3c2a]"
               >
                 <Shield size={13} />
                 <span>Admin</span>
@@ -141,7 +141,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => handleQuickDemo('lecturer')}
-                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold bg-purple-600/90 text-white hover:bg-purple-600 shadow-sm transition-all"
+                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold bg-[#4f4c36] text-white hover:bg-[#5e5a41] shadow-sm transition-all"
               >
                 <BookOpen size={13} />
                 <span>Lecturer</span>
@@ -150,7 +150,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => handleQuickDemo('student')}
-                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold bg-blue-600/90 text-white hover:bg-blue-600 shadow-sm transition-all"
+                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold bg-[#635f43] text-white hover:bg-[#736e4f] shadow-sm transition-all"
               >
                 <GraduationCap size={13} />
                 <span>Student</span>
@@ -159,7 +159,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => handleQuickDemo('employee')}
-                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] hover:border-teal transition-all"
+                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] hover:border-[#3d3c2a] transition-all"
               >
                 <Briefcase size={13} />
                 <span>Employee</span>

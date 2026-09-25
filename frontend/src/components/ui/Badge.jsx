@@ -1,14 +1,14 @@
 import React from 'react';
 
 const colorMap = {
-  teal: 'bg-teal/10 text-teal-700 dark:text-teal-300 border-teal/20',
-  blue: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800',
-  green: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-800',
-  red: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800',
-  orange: 'bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border-orange-200 dark:border-orange-800',
-  purple: 'bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-purple-200 dark:border-purple-800',
-  gray: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700',
-  cyan: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800',
+  teal: 'bg-[#3d3c2a]/15 text-[#3d3c2a] dark:text-[#e0d8cd] border-[#3d3c2a]/30 dark:border-[#e0d8cd]/30',
+  blue: 'bg-[#4f665a]/15 text-[#3d5046] dark:text-[#a0b8ac] border-[#4f665a]/30 dark:border-[#a0b8ac]/30',
+  green: 'bg-[#57634f]/15 text-[#424c3a] dark:text-[#aab8a0] border-[#57634f]/30 dark:border-[#aab8a0]/30',
+  red: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20',
+  orange: 'bg-[#a67c52]/15 text-[#7a5836] dark:text-[#d4b18f] border-[#a67c52]/30 dark:border-[#d4b18f]/30',
+  purple: 'bg-[#6b5b54]/15 text-[#544640] dark:text-[#c4b5ad] border-[#6b5b54]/30 dark:border-[#c4b5ad]/30',
+  gray: 'bg-[var(--color-surface-alt)] text-[var(--color-text-secondary)] border-[var(--color-border)]',
+  cyan: 'bg-[#4f665a]/15 text-[#3d5046] dark:text-[#a0b8ac] border-[#4f665a]/30 dark:border-[#a0b8ac]/30',
 };
 
 const sizes = {

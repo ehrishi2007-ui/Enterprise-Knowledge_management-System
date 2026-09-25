@@ -4,27 +4,33 @@
 
 @layer base {
   :root {
-    --color-navy: #11172a;
-    --color-slate: #626c7d;
-    --color-teal: #599692;
-    --color-teal-hover: #4a837f;
-    --color-teal-light: #e8f0ef;
-    --color-ice: #dfe5ec;
-    --color-bg: #F8FAFB;
+    --color-navy: #1a1914;
+    --color-slate: #7a7465;
+    --color-teal: #5e593c;
+    --color-teal-hover: #4c4830;
+    --color-teal-light: #f2ede4;
+    --color-ice: #e0d8cd;
+    --color-bg: #F7F5F0;
     --color-surface: #FFFFFF;
-    --color-surface-alt: #dfe5ec;
-    --color-text: #1a1a2e;
-    --color-text-secondary: #626c7d;
-    --color-border: #dfe5ec;
+    --color-surface-alt: #ECE6DC;
+    --color-text: #23221b;
+    --color-text-secondary: #706a5c;
+    --color-border: #E0D8CD;
   }
 
   .dark {
-    --color-bg: #0F0F0F;
-    --color-surface: #1A1A1A;
-    --color-surface-alt: #252525;
-    --color-text: #e4e4e7;
-    --color-text-secondary: #9ca3af;
-    --color-border: #2A2A2A;
+    --color-navy: #14140f;
+    --color-slate: #9e9686;
+    --color-teal: #ded6c8;
+    --color-teal-hover: #ece5d8;
+    --color-teal-light: #28271e;
+    --color-ice: #2c2a21;
+    --color-bg: #14140F;
+    --color-surface: #1E1D16;
+    --color-surface-alt: #27261E;
+    --color-text: #F4EFE6;
+    --color-text-secondary: #ABA394;
+    --color-border: #353427;
   }
 
   body {
@@ -47,31 +53,32 @@
     @apply bg-slate2/50;
   }
   .dark ::-webkit-scrollbar-thumb {
-    @apply bg-white/10;
+    background-color: rgba(224, 216, 205, 0.15);
+    border-radius: 9999px;
   }
   .dark ::-webkit-scrollbar-thumb:hover {
-    @apply bg-white/20;
+    background-color: rgba(224, 216, 205, 0.28);
   }
 }
 
 @layer components {
   .card {
-    @apply bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-sm;
+    @apply bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-sm transition-colors;
   }
   .card-hover {
-    @apply card hover:shadow-md hover:border-teal/30 transition-all duration-200;
+    @apply card hover:shadow-md hover:border-teal/40 dark:hover:border-stone/40 transition-all duration-200;
   }
   .btn-primary {
-    @apply bg-teal hover:bg-teal-500 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-teal/50;
+    @apply bg-teal hover:bg-teal-500 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-teal/40 shadow-sm;
   }
   .btn-secondary {
     @apply bg-[var(--color-surface-alt)] hover:bg-[var(--color-border)] text-[var(--color-text)] font-medium px-4 py-2 rounded-lg transition-colors duration-150 border border-[var(--color-border)];
   }
   .btn-danger {
-    @apply bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150;
+    @apply bg-red-700 hover:bg-red-800 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150;
   }
   .input-field {
-    @apply w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-teal/50 focus:border-teal transition-colors;
+    @apply w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-[var(--color-text)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-teal/40 focus:border-teal transition-colors;
   }
   .label {
     @apply block text-sm font-medium text-[var(--color-text-secondary)] mb-1;
@@ -81,6 +88,38 @@
 @layer utilities {
   .text-primary { color: var(--color-text); }
   .text-secondary { color: var(--color-text-secondary); }
+
+  /* Dark mode accent luminance overrides for Dark Olive & Warm Stone harmony */
+  .dark .text-teal {
+    color: #e0d8cd !important;
+  }
+  .dark .text-teal-300 {
+    color: #ede6dc !important;
+  }
+  .dark .text-teal-400 {
+    color: #e0d8cd !important;
+  }
+  .dark .border-teal\/20 {
+    border-color: rgba(224, 216, 205, 0.2) !important;
+  }
+  .dark .border-teal\/30 {
+    border-color: rgba(224, 216, 205, 0.3) !important;
+  }
+  .dark .border-teal\/40 {
+    border-color: rgba(224, 216, 205, 0.4) !important;
+  }
+  .dark .bg-teal\/10 {
+    background-color: rgba(224, 216, 205, 0.1) !important;
+  }
+  .dark .bg-teal\/15 {
+    background-color: rgba(224, 216, 205, 0.15) !important;
+  }
+  .dark .bg-teal\/20 {
+    background-color: rgba(224, 216, 205, 0.2) !important;
+  }
+  .dark .fill-teal {
+    fill: #e0d8cd !important;
+  }
 
   @keyframes fade-in {
     from { opacity: 0; transform: translateY(8px); }

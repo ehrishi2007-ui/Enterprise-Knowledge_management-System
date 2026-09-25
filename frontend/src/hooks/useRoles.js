@@ -14,7 +14,7 @@ const DEFAULT_FALLBACK_ROLES = [
     can_manage_departments: true,
     can_manage_settings: true,
     is_custom: false,
-    color: 'teal'
+    color: 'olive'
   },
   {
     role_name: 'lecturer',
@@ -26,7 +26,7 @@ const DEFAULT_FALLBACK_ROLES = [
     can_manage_departments: false,
     can_manage_settings: false,
     is_custom: false,
-    color: 'purple'
+    color: 'stone'
   },
   {
     role_name: 'student',
@@ -38,7 +38,7 @@ const DEFAULT_FALLBACK_ROLES = [
     can_manage_departments: false,
     can_manage_settings: false,
     is_custom: false,
-    color: 'blue'
+    color: 'olive'
   },
   {
     role_name: 'employee',
@@ -50,7 +50,7 @@ const DEFAULT_FALLBACK_ROLES = [
     can_manage_departments: false,
     can_manage_settings: false,
     is_custom: false,
-    color: 'emerald'
+    color: 'stone'
   },
   {
     role_name: 'staff',
@@ -62,7 +62,7 @@ const DEFAULT_FALLBACK_ROLES = [
     can_manage_departments: false,
     can_manage_settings: false,
     is_custom: false,
-    color: 'orange'
+    color: 'olive'
   }
 ];
 
