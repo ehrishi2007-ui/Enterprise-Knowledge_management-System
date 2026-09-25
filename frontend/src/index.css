@@ -44,13 +44,14 @@
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-transparent;
+    background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-slate2/30 rounded-full;
+    background-color: rgba(142, 135, 120, 0.3);
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-slate2/50;
+    background-color: rgba(142, 135, 120, 0.5);
   }
   .dark ::-webkit-scrollbar-thumb {
     background-color: rgba(224, 216, 205, 0.15);
