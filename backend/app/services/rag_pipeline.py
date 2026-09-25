@@ -164,21 +164,41 @@ class RAGPipeline:
                 ("human", "{question}")
             ])
 
-            # 7. Initialize LangChain Gemini model (default: gemini-2.5-flash)
-            llm = ChatGoogleGenerativeAI(
-                model=ai_settings["model_name"],
-                google_api_key=settings.GEMINI_API_KEY,
-                temperature=ai_settings["temperature"],
-                max_tokens=ai_settings["max_tokens"]
-            )
+            # 7. Model fallback list with rapid failover (max_retries=1, timeout=15s)
+            primary_model = ai_settings.get("model_name") or settings.GEMINI_MODEL
+            candidate_models = [primary_model]
+            for fb in ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"]:
+                if fb not in candidate_models:
+                    candidate_models.append(fb)
 
-            # 8. Run LangChain pipeline
-            chain = prompt_template | llm
-            response = chain.invoke({
-                "context": formatted_context,
-                "chat_history": history_messages,
-                "question": question
-            })
+            response = None
+            last_err = None
+
+            for model_to_use in candidate_models:
+                try:
+                    logger.info(f"Invoking Gemini model: {model_to_use}")
+                    llm = ChatGoogleGenerativeAI(
+                        model=model_to_use,
+                        google_api_key=settings.GEMINI_API_KEY,
+                        temperature=ai_settings["temperature"],
+                        max_tokens=ai_settings["max_tokens"],
+                        max_retries=1,
+                        timeout=15.0
+                    )
+                    chain = prompt_template | llm
+                    response = chain.invoke({
+                        "context": formatted_context,
+                        "chat_history": history_messages,
+                        "question": question
+                    })
+                    if response and response.content:
+                        break
+                except Exception as model_err:
+                    logger.warning(f"Model {model_to_use} failed ({model_err}). Trying fallback model...")
+                    last_err = model_err
+
+            if not response or not response.content:
+                raise last_err or RuntimeError("All Gemini models failed to generate response")
             
             raw_content = response.content
             if isinstance(raw_content, str):

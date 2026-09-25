@@ -32,6 +32,28 @@ class DocumentProcessor:
             self._genai_client = genai.Client(api_key=settings.GEMINI_API_KEY)
         return self._genai_client
 
+    def generate_content_with_fallback(self, contents: list, primary_model: Optional[str] = None):
+        """Generate content with model fallbacks to survive quota and high demand spikes."""
+        candidates = [primary_model or settings.GEMINI_MODEL, "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
+        seen = set()
+        unique_candidates = []
+        for m in candidates:
+            if m and m not in seen:
+                seen.add(m)
+                unique_candidates.append(m)
+
+        last_err = None
+        for model in unique_candidates:
+            try:
+                return self.genai_client.models.generate_content(
+                    model=model,
+                    contents=contents
+                )
+            except Exception as e:
+                logger.warning(f"Vision model {model} failed ({e}), trying next candidate...")
+                last_err = e
+        raise last_err or RuntimeError("All vision models failed")
+
     def clean_text(self, text: str) -> str:
         """Clean excessive whitespace and normalize text."""
         text = re.sub(r"\n+", "\n", text)
@@ -146,8 +168,7 @@ class DocumentProcessor:
                     image_bytes = pix.tobytes("png")
 
                     # Ask Gemini Vision to transcribe the scanned page into structured Markdown
-                    ocr_response = self.genai_client.models.generate_content(
-                        model=settings.GEMINI_MODEL,
+                    ocr_response = self.generate_content_with_fallback(
                         contents=[
                             "You are an expert document OCR engine. Transcribe all readable text, tables, forms, headers, and notes from this page into clean Markdown. If tables exist, format them using markdown tables. Do not include introductory conversational text.",
                             genai.types.Part.from_bytes(data=image_bytes, mime_type="image/png")
@@ -231,8 +252,7 @@ class DocumentProcessor:
 
                     try:
                         # Caption the diagram / chart with Gemini Vision
-                        caption_response = self.genai_client.models.generate_content(
-                            model=settings.GEMINI_MODEL,
+                        caption_response = self.generate_content_with_fallback(
                             contents=[
                                 "Describe what this chart, diagram, or graphic represents in detail. Include all visible titles, axis labels, data points, process flows, and key takeaways.",
                                 genai.types.Part.from_bytes(data=img_bytes, mime_type=mime_type)
