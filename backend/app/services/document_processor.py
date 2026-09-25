@@ -2,6 +2,7 @@
 Supports Text-Only, Scanned/OCR (Gemini Vision), and Combination (Text + Charts/Diagrams) modes."""
 
 import logging
+from pathlib import Path
 import re
 from typing import Any, List, Optional
 from google import genai
@@ -93,6 +94,25 @@ class DocumentProcessor:
                     page = doc.load_page(page_num)
                     text = page.get_text("text")
                     cleaned_text = self.clean_text(text)
+
+                    # Per-page OCR fallback: If this page has almost no digital text (<40 chars)
+                    # but contains images or drawings, transcribe this individual page with Vision OCR
+                    if len(cleaned_text) < 40 and (len(page.get_images()) > 0 or len(page.get_drawings()) > 0):
+                        try:
+                            logger.info(f"Page {page_num + 1} of {document_id} has minimal text ({len(cleaned_text)} chars) with visual content. Running per-page Vision OCR.")
+                            pix = page.get_pixmap(dpi=150)
+                            image_bytes = pix.tobytes("png")
+                            ocr_resp = self.generate_content_with_fallback(
+                                contents=[
+                                    "You are an expert document OCR engine. Transcribe all readable text, tables, forms, headers, and notes from this page into clean Markdown. If tables exist, format them using markdown tables. Do not include introductory conversational text.",
+                                    genai.types.Part.from_bytes(data=image_bytes, mime_type="image/png")
+                                ]
+                            )
+                            page_ocr_text = self.clean_text(ocr_resp.text or "")
+                            if page_ocr_text:
+                                cleaned_text = page_ocr_text
+                        except Exception as ocr_err:
+                            logger.warning(f"Per-page OCR fallback failed on page {page_num + 1} of {document_id}: {ocr_err}")
 
                     if cleaned_text:
                         total_extracted_chars += len(cleaned_text)
@@ -350,6 +370,66 @@ class DocumentProcessor:
             logger.error(f"Error processing TXT document {document_id}: {e}")
             return []
 
+    def process_image(
+        self, file_bytes: bytes, filename: str, document_id: str, metadata: dict[str, Any]
+    ) -> List[Document]:
+        """Transcribe a standalone scanned image (PNG, JPG, WEBP) to Markdown using Gemini Vision OCR."""
+        doc_name = metadata.get("title", metadata.get("filename", filename))
+        department = metadata.get("department", "All")
+        tags = metadata.get("tags", [])
+        allowed_depts = metadata.get("allowed_departments", ["All"])
+        allowed_str = ",".join(allowed_depts) if isinstance(allowed_depts, list) else str(allowed_depts)
+        allowed_roles = metadata.get("allowed_roles", ["All"])
+        allowed_roles_str = ",".join(allowed_roles) if isinstance(allowed_roles, list) else str(allowed_roles)
+        is_public = ("All" in allowed_str) or ("General" in allowed_str) or (department in ["All", "General"]) or (not allowed_str)
+
+        ext = Path(filename).suffix.lstrip(".").lower()
+        mime_map = {
+            "png": "image/png",
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "webp": "image/webp"
+        }
+        mime_type = mime_map.get(ext, "image/png")
+
+        try:
+            logger.info(f"Processing Standalone Scanned Image '{doc_name}' ({document_id}) with Gemini Vision OCR")
+            ocr_response = self.generate_content_with_fallback(
+                contents=[
+                    "You are an expert document OCR engine. Transcribe all readable text, tables, forms, headers, and notes from this image into clean Markdown. If tables exist, format them using markdown tables. Do not include introductory conversational text.",
+                    genai.types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
+                ]
+            )
+            transcribed_text = self.clean_text(ocr_response.text or "")
+            if not transcribed_text:
+                return []
+
+            raw_doc = Document(
+                page_content=transcribed_text,
+                metadata={
+                    "document_id": document_id,
+                    "document_name": doc_name,
+                    "title": doc_name,
+                    "page": 1,
+                    "page_number": 1,
+                    "department": department,
+                    "allowed_departments": allowed_str,
+                    "allowed_roles": allowed_roles_str,
+                    "is_public": is_public,
+                    "tags": tags,
+                    "is_ocr": True,
+                }
+            )
+            chunk_docs = self.text_splitter.split_documents([raw_doc])
+            for i, chunk in enumerate(chunk_docs):
+                chunk.metadata["chunk_index"] = i
+
+            logger.info(f"Generated {len(chunk_docs)} LangChain chunks via Vision OCR for Image {document_id}")
+            return chunk_docs
+        except Exception as e:
+            logger.error(f"Error processing image document {document_id}: {e}", exc_info=True)
+            return []
+
     def detect_content_type(self, file_bytes: bytes, filename: str) -> str:
         """Intelligently inspects document content and returns one of:
         - 'text_only': Standard digital text documents
@@ -357,6 +437,9 @@ class DocumentProcessor:
         - 'combination': Documents containing text alongside embedded tables, charts, or diagrams
         """
         filename_lower = filename.lower()
+        if filename_lower.endswith((".png", ".jpg", ".jpeg", ".webp")):
+            return "images_only"
+
         if filename_lower.endswith(".txt"):
             return "text_only"
             
@@ -444,6 +527,8 @@ class DocumentProcessor:
                 return self.process_hybrid_pdf(file_bytes, document_id, metadata)
             else:
                 return self.process_text_pdf(file_bytes, document_id, metadata)
+        elif filename_lower.endswith((".png", ".jpg", ".jpeg", ".webp")):
+            return self.process_image(file_bytes, filename, document_id, metadata)
         elif filename_lower.endswith(".txt"):
             try:
                 text_content = file_bytes.decode("utf-8")
@@ -454,7 +539,7 @@ class DocumentProcessor:
         else:
             logger.error(f"Unsupported file format: {filename}")
             raise ValueError(
-                f"Unsupported file format for {filename}. Only PDF and TXT are supported."
+                f"Unsupported file format for {filename}. Supported formats: PDF, TXT, PNG, JPG, JPEG, WEBP."
             )
 
 

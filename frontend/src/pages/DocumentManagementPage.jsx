@@ -5,7 +5,7 @@ import { useDepartments } from '../hooks/useDepartments';
 import { useRoles } from '../hooks/useRoles';
 import { 
   Search, Upload, Edit, Trash2, FileText, CheckCircle2, 
-  AlertCircle, Layers, Shield, Clock, FileUp, Sparkles, Eye, Users, X
+  AlertCircle, Layers, Shield, Clock, FileUp, Sparkles, Eye, Users, X, RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -17,6 +17,8 @@ export default function DocumentManagementPage() {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [reprocessingDocId, setReprocessingDocId] = useState(null);
+  const [reprocessingAll, setReprocessingAll] = useState(false);
   
   // Filters & Pagination
   const [search, setSearch] = useState('');
@@ -81,6 +83,34 @@ export default function DocumentManagementPage() {
       setError('Failed to load documents.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleReprocessDocument = async (doc) => {
+    try {
+      setReprocessingDocId(doc.id);
+      toast.loading(`Running Vision OCR on "${doc.title}"...`, { id: `ocr-${doc.id}` });
+      await api.post(`/documents/${doc.id}/reprocess`);
+      toast.success(`"${doc.title}" successfully re-indexed!`, { id: `ocr-${doc.id}` });
+      fetchDocuments();
+    } catch (err) {
+      toast.error('Failed to re-index: ' + (err.response?.data?.detail || err.message), { id: `ocr-${doc.id}` });
+    } finally {
+      setReprocessingDocId(null);
+    }
+  };
+
+  const handleReprocessAllUnindexed = async () => {
+    try {
+      setReprocessingAll(true);
+      toast.loading('Scanning for unindexed scanned documents...', { id: 'ocr-all' });
+      const resp = await api.post('/documents/admin/reprocess-unindexed');
+      toast.success(resp.data?.message || 'Reprocessing complete!', { id: 'ocr-all' });
+      fetchDocuments();
+    } catch (err) {
+      toast.error('Failed: ' + (err.response?.data?.detail || err.message), { id: 'ocr-all' });
+    } finally {
+      setReprocessingAll(false);
     }
   };
 
@@ -362,11 +392,13 @@ export default function DocumentManagementPage() {
       accessor: 'processing_status',
       render: (doc) => (
         <Badge 
-          color={doc.processing_status === 'completed' ? 'green' : 'orange'}
+          color={doc.chunk_count > 0 && doc.processing_status === 'completed' ? 'green' : (doc.chunk_count === 0 ? 'orange' : 'teal')}
           size="sm"
           dot
         >
-          {doc.processing_status === 'completed' ? 'Ready' : (doc.processing_status || 'Pending')}
+          {doc.chunk_count > 0 && doc.processing_status === 'completed' 
+            ? `${doc.chunk_count} Chunks` 
+            : (doc.chunk_count === 0 ? '0 Chunks (Unread)' : (doc.processing_status || 'Pending'))}
         </Badge>
       )
     },
@@ -390,6 +422,16 @@ export default function DocumentManagementPage() {
             title="Preview PDF / Document"
           >
             <Eye size={14} />
+          </button>
+          <button
+            onClick={() => handleReprocessDocument(doc)}
+            disabled={reprocessingDocId === doc.id}
+            className={`p-1.5 rounded hover:bg-[var(--color-surface-alt)] transition-colors ${
+              doc.chunk_count === 0 ? 'text-amber-400 hover:text-amber-300 animate-pulse' : 'text-[var(--color-text-secondary)] hover:text-teal'
+            }`}
+            title={doc.chunk_count === 0 ? "Document has 0 chunks! Click to run OCR" : "Re-run OCR & Re-index"}
+          >
+            <RefreshCw size={14} className={reprocessingDocId === doc.id ? "animate-spin text-teal" : ""} />
           </button>
           <button
             onClick={() => openTagModal(doc)}
@@ -454,6 +496,17 @@ export default function DocumentManagementPage() {
                 <option key={d.id || d.name} value={d.name}>{d.name}</option>
               ))}
             </select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReprocessAllUnindexed}
+              disabled={reprocessingAll}
+              className="flex items-center gap-1.5 text-xs text-teal hover:bg-teal/10 border-teal/30 whitespace-nowrap"
+              title="Automatically find any scanned documents with 0 chunks and run Vision OCR"
+            >
+              <RefreshCw size={13} className={reprocessingAll ? "animate-spin" : ""} />
+              {reprocessingAll ? "Indexing Scans..." : "Sync / OCR All"}
+            </Button>
           </div>
 
           {loading ? (
@@ -516,12 +569,12 @@ export default function DocumentManagementPage() {
           <form onSubmit={handleUploadSubmit} className="space-y-4">
             {/* File Picker */}
             <div>
-              <label className="label">Select Document(s) (PDF or TXT, up to 50MB each) *</label>
+              <label className="label">Select Document(s) (PDF, TXT, or Scanned Images up to 50MB each) *</label>
               <div className="relative border-2 border-dashed border-[var(--color-border)] hover:border-teal rounded-2xl p-6 text-center transition-colors bg-[var(--color-surface-alt)]">
                 <input
                   type="file"
                   multiple
-                  accept=".pdf,.txt"
+                  accept=".pdf,.txt,.png,.jpg,.jpeg,.webp"
                   onChange={handleFileSelect}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
@@ -531,7 +584,7 @@ export default function DocumentManagementPage() {
                     Click or drag files to upload (single or multiple)
                   </span>
                   <span className="text-[11px] text-[var(--color-text-secondary)] block mt-0.5">
-                    PDF policies, handbooks, course materials, or TXT documents
+                    PDF policies, handbooks, photocopies, or scanned images (PNG, JPG, WEBP)
                   </span>
                 </div>
               </div>

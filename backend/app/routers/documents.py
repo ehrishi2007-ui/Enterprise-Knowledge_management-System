@@ -67,10 +67,34 @@ async def upload_document(
                 detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE_MB}MB."
             )
 
+        # Check if file is a standalone image (PNG, JPG, JPEG, WEBP)
+        filename_lower = file.filename.lower()
+        is_image = filename_lower.endswith((".png", ".jpg", ".jpeg", ".webp"))
+
         # Auto-detect content type if set to "auto"
         if content_type == "auto" or not content_type:
             content_type = document_processor.detect_content_type(file_bytes, file.filename)
             logger.info(f"Auto-detected content type for {file.filename}: '{content_type}'")
+
+        # If it's a standalone image, convert to 1-page PDF so it satisfies DB schema and PDF viewer
+        upload_bytes = file_bytes
+        upload_filename = file.filename
+        if is_image:
+            try:
+                import fitz
+                img_doc = fitz.open(stream=file_bytes, filetype=Path(file.filename).suffix.lstrip(".").lower())
+                upload_bytes = img_doc.convert_to_pdf()
+                img_doc.close()
+                upload_filename = f"{Path(file.filename).stem}.pdf"
+                file_type = "pdf"
+                content_type = "images_only"
+            except Exception as img_err:
+                logger.warning(f"Could not convert image to PDF: {img_err}")
+                file_type = "pdf"
+        elif filename_lower.endswith(".pdf"):
+            file_type = "pdf"
+        else:
+            file_type = "txt"
         
         # Parse tags, allowed_departments & allowed_roles
         if isinstance(tags, str):
@@ -102,15 +126,13 @@ async def upload_document(
         set_doc_roles(supabase, document_id, allowed_roles_list)
         
         # Upload file to Supabase storage
-        storage_path = f"{document_id}/{file.filename}"
-        supabase.storage.from_("documents").upload(storage_path, file_bytes)
-        
-        file_type = "pdf" if file.filename.lower().endswith(".pdf") else "txt"
+        storage_path = f"{document_id}/{upload_filename}"
+        supabase.storage.from_("documents").upload(storage_path, upload_bytes)
         
         metadata = {
             "id": document_id,
             "title": doc_title,
-            "filename": file.filename,
+            "filename": upload_filename,
             "file_type": file_type,
             "content_type": content_type,
             "file_size_bytes": len(file_bytes),
@@ -461,4 +483,110 @@ async def update_tags(
     except Exception as e:
         logger.error(f"Error updating document tags: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to update document")
+
+@router.post("/{document_id}/reprocess", response_model=DocumentResponse)
+async def reprocess_document(
+    document_id: str,
+    current_user: dict = Depends(require_admin),
+    supabase = Depends(get_supabase_client)
+):
+    """Admin only. Re-download a document from storage, re-run OCR & processing, and update ChromaDB."""
+    try:
+        resp = supabase.table("documents").select("*").eq("id", document_id).execute()
+        if not resp.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+        doc = resp.data[0]
+        filename = doc["filename"]
+        storage_path = doc.get("storage_path") or f"{document_id}/{filename}"
+
+        logger.info(f"Reprocessing document {filename} ({document_id})...")
+        file_bytes = supabase.storage.from_("documents").download(storage_path)
+
+        roles_map = get_doc_roles_map(supabase)
+        allowed_roles = doc.get("allowed_roles") or roles_map.get(str(document_id)) or ["All"]
+
+        metadata = dict(doc)
+        metadata["document_id"] = document_id
+        metadata["allowed_roles"] = allowed_roles
+        content_type = doc.get("content_type") or "auto"
+
+        # Delete existing chunks first to prevent duplicates
+        chroma_service.delete_document_chunks(document_id)
+
+        # Reprocess with OCR/text
+        chunks = document_processor.process_document(
+            file_bytes=file_bytes,
+            filename=filename,
+            document_id=document_id,
+            metadata=metadata,
+            content_type=content_type
+        )
+        chunk_count = len(chunks)
+        if chunk_count > 0:
+            chroma_service.add_documents(chunks)
+
+        updated_resp = supabase.table("documents").update({
+            "chunk_count": chunk_count,
+            "processing_status": "completed"
+        }).eq("id", document_id).execute()
+
+        res_data = updated_resp.data[0]
+        res_data["allowed_roles"] = allowed_roles
+        return DocumentResponse(**res_data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reprocessing document {document_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to reprocess document: {str(e)}")
+
+@router.post("/admin/reprocess-unindexed", response_model=MessageResponse)
+async def reprocess_unindexed_documents(
+    current_user: dict = Depends(require_admin),
+    supabase = Depends(get_supabase_client)
+):
+    """Admin only. Automatically find all documents with 0 chunks or pending/failed status and reprocess them."""
+    try:
+        resp = supabase.table("documents").select("*").or_("chunk_count.eq.0,processing_status.neq.completed").execute()
+        unindexed = resp.data or []
+        if not unindexed:
+            return MessageResponse(message="All documents are already indexed.", success=True)
+
+        reprocessed_count = 0
+        roles_map = get_doc_roles_map(supabase)
+        for doc in unindexed:
+            doc_id = doc["id"]
+            filename = doc["filename"]
+            storage_path = doc.get("storage_path") or f"{doc_id}/{filename}"
+            try:
+                file_bytes = supabase.storage.from_("documents").download(storage_path)
+                meta = dict(doc)
+                meta["document_id"] = doc_id
+                meta["allowed_roles"] = doc.get("allowed_roles") or roles_map.get(str(doc_id)) or ["All"]
+                content_type = doc.get("content_type") or "auto"
+
+                chroma_service.delete_document_chunks(doc_id)
+                chunks = document_processor.process_document(
+                    file_bytes=file_bytes,
+                    filename=filename,
+                    document_id=doc_id,
+                    metadata=meta,
+                    content_type=content_type
+                )
+                if chunks:
+                    chroma_service.add_documents(chunks)
+                supabase.table("documents").update({
+                    "chunk_count": len(chunks),
+                    "processing_status": "completed"
+                }).eq("id", doc_id).execute()
+                reprocessed_count += 1
+            except Exception as doc_err:
+                logger.error(f"Failed reprocessing document {doc_id} ({filename}): {doc_err}")
+
+        return MessageResponse(
+            message=f"Reprocessed {reprocessed_count} of {len(unindexed)} unindexed documents.",
+            success=True
+        )
+    except Exception as e:
+        logger.error(f"Error in reprocess_unindexed_documents: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to reprocess unindexed documents: {str(e)}")
 
