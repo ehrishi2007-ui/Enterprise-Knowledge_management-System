@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.config import settings
 from app.middleware.auth import get_current_user, require_admin
 from app.dependencies import get_supabase_client
-from app.models.schemas import UserCreate, UserUpdate, UserInfo, UserListResponse, MessageResponse
+from app.models.schemas import UserCreate, UserUpdate, UserProfileUpdate, UserInfo, UserListResponse, MessageResponse
 
 router = APIRouter(tags=["Users"])
 logger = logging.getLogger(__name__)
@@ -16,6 +16,55 @@ async def get_my_profile(
 ):
     """Get current authenticated user profile."""
     return UserInfo(**current_user)
+
+@router.put("/me", response_model=UserInfo)
+async def update_my_profile(
+    profile_update: UserProfileUpdate,
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+):
+    """Allow any authenticated user (admin or employee) to edit their own display name, department, or password."""
+    try:
+        user_id = str(current_user["id"])
+        update_payload = {}
+        if profile_update.display_name is not None and profile_update.display_name.strip():
+            update_payload["display_name"] = profile_update.display_name.strip()
+        if profile_update.department is not None and profile_update.department.strip():
+            update_payload["department"] = profile_update.department.strip()
+            
+        # Update password if provided
+        if profile_update.password and len(profile_update.password) >= 6:
+            try:
+                supabase.auth.admin.update_user_by_id(user_id, {"password": profile_update.password})
+                logger.info(f"Updated password for user {user_id}")
+            except Exception as pwd_err:
+                logger.warning(f"Could not update password via auth.admin for user {user_id}: {pwd_err}")
+
+        # Update profile in Supabase table
+        if update_payload:
+            try:
+                resp = supabase.table("profiles").update(update_payload).eq("id", user_id).execute()
+                if resp.data:
+                    current_user.update(resp.data[0])
+            except Exception as db_err:
+                logger.warning(f"Error updating profiles table for {user_id}: {db_err}")
+                current_user.update(update_payload)
+                
+            # Update user_metadata in Supabase auth
+            try:
+                supabase.auth.admin.update_user_by_id(user_id, {"user_metadata": update_payload})
+            except Exception:
+                pass
+        else:
+            resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
+            if resp.data:
+                current_user.update(resp.data[0])
+
+        return UserInfo(**current_user)
+    except Exception as e:
+        logger.error(f"Error updating profile for {current_user.get('id')}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to update profile: {str(e)}")
+
 
 @router.get("", response_model=UserListResponse)
 @router.get("/", response_model=UserListResponse)

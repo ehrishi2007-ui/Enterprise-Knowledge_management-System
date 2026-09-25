@@ -330,6 +330,77 @@ class DocumentProcessor:
             logger.error(f"Error processing TXT document {document_id}: {e}")
             return []
 
+    def detect_content_type(self, file_bytes: bytes, filename: str) -> str:
+        """Intelligently inspects document content and returns one of:
+        - 'text_only': Standard digital text documents
+        - 'images_only': Scanned/photocopied documents requiring Vision OCR
+        - 'combination': Documents containing text alongside embedded tables, charts, or diagrams
+        """
+        filename_lower = filename.lower()
+        if filename_lower.endswith(".txt"):
+            return "text_only"
+            
+        if not filename_lower.endswith(".pdf"):
+            return "text_only"
+            
+        try:
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            total_pages = len(doc)
+            if total_pages == 0:
+                doc.close()
+                return "text_only"
+                
+            sample_pages = min(total_pages, 8)
+            total_chars = 0
+            has_images = False
+            has_tables = False
+            has_drawings = False
+            
+            for page_num in range(sample_pages):
+                page = doc.load_page(page_num)
+                text = page.get_text("text").strip()
+                total_chars += len(text)
+                
+                # Check for images on page
+                images = page.get_images()
+                if images and len(images) > 0:
+                    has_images = True
+                    
+                # Check for vector graphics/drawings (charts, diagrams)
+                drawings = page.get_drawings()
+                if drawings and len(drawings) > 15:
+                    has_drawings = True
+                    
+                # Check for tables using PyMuPDF find_tables
+                if hasattr(page, "find_tables"):
+                    try:
+                        tabs = page.find_tables()
+                        if tabs and len(tabs.tables) > 0:
+                            has_tables = True
+                    except Exception:
+                        pass
+                        
+            doc.close()
+            
+            avg_chars_per_page = total_chars / max(sample_pages, 1)
+            
+            # If text is very low (< 40 chars/page) and there are pages -> scanned PDF
+            if avg_chars_per_page < 40:
+                logger.info(f"Auto-detected 'images_only' (Scanned OCR) for '{filename}': avg {avg_chars_per_page:.1f} chars/page")
+                return "images_only"
+                
+            # If there is digital text AND charts/tables/diagrams -> combination
+            if has_images or has_tables or has_drawings:
+                logger.info(f"Auto-detected 'combination' (Text + Charts/Tables/Diagrams) for '{filename}': images={has_images}, tables={has_tables}, drawings={has_drawings}")
+                return "combination"
+                
+            logger.info(f"Auto-detected 'text_only' (Standard Digital PDF) for '{filename}': avg {avg_chars_per_page:.1f} chars/page")
+            return "text_only"
+            
+        except Exception as e:
+            logger.warning(f"Auto-detection error for '{filename}': {e}. Defaulting to 'text_only'")
+            return "text_only"
+
     def process_document(
         self,
         file_bytes: bytes,
@@ -338,8 +409,13 @@ class DocumentProcessor:
         metadata: dict[str, Any],
         content_type: str = "text_only",
     ) -> List[Document]:
-        """Route to appropriate processor based on file extension and selected content_type."""
+        """Route to appropriate processor based on file extension and selected content_type (or auto-detected)."""
         filename_lower = filename.lower()
+
+        # Support auto-detection of document content
+        if content_type == "auto" or not content_type:
+            content_type = self.detect_content_type(file_bytes, filename)
+            metadata["content_type"] = content_type
 
         if filename_lower.endswith(".pdf"):
             if content_type == "images_only":
@@ -360,6 +436,7 @@ class DocumentProcessor:
             raise ValueError(
                 f"Unsupported file format for {filename}. Only PDF and TXT are supported."
             )
+
 
 
 # Singleton instance

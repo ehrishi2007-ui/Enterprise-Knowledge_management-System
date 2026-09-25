@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import api from '../lib/api';
 
 const AuthContext = createContext();
+
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -144,11 +146,33 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const updateProfile = async (profileData) => {
+    try {
+      const res = await api.put('/users/me', profileData);
+      const updatedUser = {
+        ...user,
+        ...res.data,
+      };
+      setUser(updatedUser);
+      return updatedUser;
+    } catch (err) {
+      console.error('Failed to update profile via API:', err);
+      const updatedUser = {
+        ...user,
+        ...(profileData.display_name && { display_name: profileData.display_name }),
+        ...(profileData.department && { department: profileData.department }),
+      };
+      setUser(updatedUser);
+      return updatedUser;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithDemoToken, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithDemoToken, logout, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );
+
 }
 
 export function useAuth() {

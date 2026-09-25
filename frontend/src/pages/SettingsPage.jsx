@@ -17,10 +17,25 @@ const PRESET_COLORS = [
 ];
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { departments, loading: deptsLoading, refresh: refreshDepts } = useDepartments();
   const isAdmin = user?.role === 'admin';
+
+  // Profile editing state (works on both Admin and Employee sides)
+  const [profileDisplayName, setProfileDisplayName] = useState(user?.display_name || '');
+  const [profileDepartment, setProfileDepartment] = useState(user?.department || '');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setProfileDisplayName(user.display_name || '');
+      setProfileDepartment(user.department || (departments[0]?.name || 'General'));
+    }
+  }, [user, departments]);
 
   // AI settings
   const [systemPrompt, setSystemPrompt] = useState('');
@@ -47,6 +62,7 @@ export default function SettingsPage() {
   const [deptToDelete, setDeptToDelete] = useState(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletingDept, setDeletingDept] = useState(false);
+
 
   useEffect(() => {
     if (isAdmin) {
@@ -451,7 +467,7 @@ export default function SettingsPage() {
         </form>
       )}
 
-      {/* 3. ACCOUNT PROFILE */}
+      {/* 3. ACCOUNT PROFILE (EDITABLE ON BOTH ADMIN & EMPLOYEE SIDES) */}
       <Card>
         <Card.Header>
           <div className="flex items-center gap-2.5">
@@ -460,35 +476,146 @@ export default function SettingsPage() {
             </div>
             <div>
               <Card.Title>Account Profile</Card.Title>
-              <Card.Description>Your current login profile details</Card.Description>
+              <Card.Description>Edit your personal institutional profile details</Card.Description>
             </div>
           </div>
         </Card.Header>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
-          <div className="p-3 bg-[var(--color-surface-alt)] rounded-xl border border-[var(--color-border)]">
-            <span className="text-[11px] text-[var(--color-text-secondary)] block mb-0.5">Name</span>
-            <span className="font-semibold text-sm text-[var(--color-text)]">{user?.display_name || 'User'}</span>
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          if (!profileDisplayName.trim()) {
+            toast.error('Display name cannot be empty');
+            return;
+          }
+          if (showPasswordChange && newPassword) {
+            if (newPassword.length < 6) {
+              toast.error('Password must be at least 6 characters');
+              return;
+            }
+            if (newPassword !== confirmPassword) {
+              toast.error('Passwords do not match');
+              return;
+            }
+          }
+
+          try {
+            setProfileSaving(true);
+            await updateProfile({
+              display_name: profileDisplayName.trim(),
+              department: profileDepartment,
+              ...(showPasswordChange && newPassword ? { password: newPassword } : {})
+            });
+            toast.success('Profile updated successfully!');
+            setNewPassword('');
+            setConfirmPassword('');
+            setShowPasswordChange(false);
+          } catch (err) {
+            toast.error('Failed to update profile');
+          } finally {
+            setProfileSaving(false);
+          }
+        }} className="space-y-4 pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="label">Full / Display Name *</label>
+              <input
+                type="text"
+                required
+                value={profileDisplayName}
+                onChange={(e) => setProfileDisplayName(e.target.value)}
+                placeholder="e.g. Dr. Jane Doe"
+                className="input-field text-xs py-2"
+              />
+            </div>
+
+            <div>
+              <label className="label">Email Address</label>
+              <input
+                type="email"
+                disabled
+                value={user?.email || '—'}
+                className="input-field text-xs py-2 bg-[var(--color-surface-alt)] opacity-70 cursor-not-allowed font-mono"
+                title="Email is your primary login identifier"
+              />
+            </div>
+
+            <div>
+              <label className="label">Institutional Department</label>
+              <select
+                value={profileDepartment}
+                onChange={(e) => setProfileDepartment(e.target.value)}
+                className="input-field text-xs py-2"
+              >
+                {departments.map((d) => (
+                  <option key={d.id || d.name} value={d.name}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="label">Assigned Role</label>
+              <div className="h-[38px] flex items-center px-3 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-border)]">
+                <Badge color={user?.role === 'admin' ? 'teal' : 'purple'} size="sm">
+                  {user?.role ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'Member'}
+                </Badge>
+                <span className="text-[10px] text-[var(--color-text-secondary)] ml-2">
+                  (Managed by Admin)
+                </span>
+              </div>
+            </div>
           </div>
 
-          <div className="p-3 bg-[var(--color-surface-alt)] rounded-xl border border-[var(--color-border)]">
-            <span className="text-[11px] text-[var(--color-text-secondary)] block mb-0.5">Email</span>
-            <span className="font-mono text-xs text-[var(--color-text)]">{user?.email || '—'}</span>
+          {/* Change Password Toggle */}
+          <div className="pt-2 border-t border-[var(--color-border)]">
+            <button
+              type="button"
+              onClick={() => setShowPasswordChange(!showPasswordChange)}
+              className="text-xs font-semibold text-teal hover:underline flex items-center gap-1.5"
+            >
+              <span>{showPasswordChange ? '− Cancel Password Change' : '+ Change Password'}</span>
+            </button>
+
+            {showPasswordChange && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 p-3 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-border)]">
+                <div>
+                  <label className="label">New Password (min 6 characters)</label>
+                  <input
+                    type="password"
+                    placeholder="Enter new password..."
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="input-field text-xs py-2"
+                  />
+                </div>
+                <div>
+                  <label className="label">Confirm New Password</label>
+                  <input
+                    type="password"
+                    placeholder="Re-enter new password..."
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="input-field text-xs py-2"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="p-3 bg-[var(--color-surface-alt)] rounded-xl border border-[var(--color-border)]">
-            <span className="text-[11px] text-[var(--color-text-secondary)] block mb-1">Access Role</span>
-            <Badge color={user?.role === 'admin' ? 'teal' : 'gray'} size="sm">
-              {user?.role === 'admin' ? 'Administrator' : 'Staff / Member'}
-            </Badge>
+          <div className="flex justify-end pt-2">
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={profileSaving}
+              icon={Save}
+              className="text-xs"
+            >
+              Save Profile Details
+            </Button>
           </div>
-
-          <div className="p-3 bg-[var(--color-surface-alt)] rounded-xl border border-[var(--color-border)]">
-            <span className="text-[11px] text-[var(--color-text-secondary)] block mb-1">Department</span>
-            <span className="font-semibold text-xs text-[var(--color-text)]">{user?.department || 'General'}</span>
-          </div>
-        </div>
+        </form>
       </Card>
+
 
       {/* 4. THEME TOGGLE */}
       <Card>

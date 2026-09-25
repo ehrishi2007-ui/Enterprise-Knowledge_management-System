@@ -75,19 +75,24 @@ export default function TopBar({ onMenuClick, pageTitle }) {
         </button>
 
         {/* User Profile Pill */}
-        <div className="flex items-center gap-2.5 pl-2 border-l border-[var(--color-border)]">
+        <div 
+          onClick={() => navigate(user?.role === 'admin' ? '/admin/settings' : '/employee/settings')}
+          className="flex items-center gap-2.5 pl-2 border-l border-[var(--color-border)] cursor-pointer group"
+          title="View & Edit Profile Settings"
+        >
           <div className="hidden sm:flex flex-col items-end text-right">
-            <span className="text-xs font-semibold text-[var(--color-text)] leading-tight truncate max-w-[120px]">
+            <span className="text-xs font-semibold text-[var(--color-text)] group-hover:text-teal transition-colors leading-tight truncate max-w-[120px]">
               {user?.display_name || 'Guest'}
             </span>
             <span className="text-[10px] uppercase font-bold text-teal leading-tight mt-0.5">
               {ROLE_CONFIG[user?.role]?.label || user?.role || 'User'}
             </span>
           </div>
-          <div className="w-8 h-8 rounded-full bg-teal text-white flex items-center justify-center font-bold text-xs shadow-sm">
+          <div className="w-8 h-8 rounded-full bg-teal text-white flex items-center justify-center font-bold text-xs shadow-sm group-hover:ring-2 group-hover:ring-teal/40 transition-all">
             {user?.display_name ? user.display_name.charAt(0).toUpperCase() : 'U'}
           </div>
         </div>
+
       </div>
     </header>
   );

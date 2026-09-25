@@ -44,7 +44,7 @@ def set_doc_roles(supabase, doc_id: str, roles: List[str]):
 async def upload_document(
     title: Optional[str] = Form(None),
     department: Optional[str] = Form(None),
-    content_type: str = Form("text_only"),
+    content_type: str = Form("auto"),
     tags: str = Form(""),
     allowed_departments: str = Form(""),
     allowed_roles: str = Form(""),
@@ -66,6 +66,11 @@ async def upload_document(
                 status_code=413,
                 detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE_MB}MB."
             )
+
+        # Auto-detect content type if set to "auto"
+        if content_type == "auto" or not content_type:
+            content_type = document_processor.detect_content_type(file_bytes, file.filename)
+            logger.info(f"Auto-detected content type for {file.filename}: '{content_type}'")
         
         # Parse tags, allowed_departments & allowed_roles
         if isinstance(tags, str):
@@ -159,9 +164,50 @@ async def upload_document(
         res_data = updated_doc_resp.data[0]
         res_data["allowed_roles"] = allowed_roles_list
         return DocumentResponse(**res_data)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error uploading document: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to upload document: {str(e)}")
+
+@router.post("/batch-upload", response_model=List[DocumentResponse])
+async def batch_upload_documents(
+    department: Optional[str] = Form(None),
+    content_type: str = Form("auto"),
+    tags: str = Form(""),
+    allowed_departments: str = Form(""),
+    allowed_roles: str = Form(""),
+    files: List[UploadFile] = File(...),
+    current_user: dict = Depends(require_upload_permission),
+    supabase = Depends(get_supabase_client)
+):
+    """Batch upload multiple documents at once with auto-detection of content types."""
+    uploaded_docs = []
+    errors = []
+    
+    for f in files:
+        try:
+            doc_res = await upload_document(
+                title=None,
+                department=department,
+                content_type=content_type,
+                tags=tags,
+                allowed_departments=allowed_departments,
+                allowed_roles=allowed_roles,
+                file=f,
+                current_user=current_user,
+                supabase=supabase
+            )
+            uploaded_docs.append(doc_res)
+        except Exception as e:
+            logger.error(f"Error in batch upload for {f.filename}: {e}")
+            errors.append(f"{f.filename}: {str(e)}")
+            
+    if not uploaded_docs and errors:
+        raise HTTPException(status_code=500, detail=f"Batch upload failed: {'; '.join(errors)}")
+        
+    return uploaded_docs
+
 
 @router.get("", response_model=List[DocumentResponse])
 @router.get("/", response_model=List[DocumentResponse])

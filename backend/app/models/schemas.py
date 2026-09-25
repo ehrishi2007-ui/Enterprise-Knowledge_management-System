@@ -109,9 +109,15 @@ class UserUpdate(BaseModel):
     department: Optional[str] = None
     is_active: Optional[bool] = None
 
+class UserProfileUpdate(BaseModel):
+    display_name: Optional[str] = None
+    department: Optional[str] = None
+    password: Optional[str] = Field(None, min_length=6)
+
 class UserListResponse(BaseModel):
     users: List[UserInfo]
     total_count: int
+
 
 # === Feedback ===
 class FeedbackCreate(BaseModel):

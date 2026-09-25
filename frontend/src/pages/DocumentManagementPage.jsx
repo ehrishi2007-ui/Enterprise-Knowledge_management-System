@@ -5,7 +5,7 @@ import { useDepartments } from '../hooks/useDepartments';
 import { useRoles } from '../hooks/useRoles';
 import { 
   Search, Upload, Edit, Trash2, FileText, CheckCircle2, 
-  AlertCircle, Layers, Shield, Clock, FileUp, Sparkles, Eye, Users
+  AlertCircle, Layers, Shield, Clock, FileUp, Sparkles, Eye, Users, X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -40,10 +40,10 @@ export default function DocumentManagementPage() {
   const [uploadData, setUploadData] = useState({
     title: '',
     department: '',
-    content_type: 'text_only',
-    tags: '',
-    file: null
+    content_type: 'auto',
+    tags: ''
   });
+  const [uploadFiles, setUploadFiles] = useState([]);
   const [uploadAllowedDepts, setUploadAllowedDepts] = useState([]);
   const [uploadAllowedRoles, setUploadAllowedRoles] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -140,43 +140,66 @@ export default function DocumentManagementPage() {
   };
 
   const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const selected = Array.from(e.target.files || []);
+    if (!selected.length) return;
 
     const maxBytes = 50 * 1024 * 1024;
-    if (file.size > maxBytes) {
-      toast.error('File exceeds 50MB limit. Please select a smaller file.');
-      return;
+    const validFiles = [];
+    for (const file of selected) {
+      if (file.size > maxBytes) {
+        toast.error(`File "${file.name}" exceeds 50MB limit.`);
+      } else {
+        validFiles.push(file);
+      }
     }
+    if (!validFiles.length) return;
 
-    setUploadData(prev => ({
-      ...prev,
-      file,
-      title: prev.title ? prev.title : file.name.replace(/\.[^/.]+$/, "")
-    }));
+    setUploadFiles(prev => {
+      const updated = [...prev, ...validFiles];
+      if (updated.length === 1 && !uploadData.title) {
+        setUploadData(ud => ({ ...ud, title: updated[0].name.replace(/\.[^/.]+$/, "") }));
+      }
+      return updated;
+    });
+  };
+
+  const removeFile = (index) => {
+    setUploadFiles(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      if (updated.length === 1 && !uploadData.title) {
+        setUploadData(ud => ({ ...ud, title: updated[0].name.replace(/\.[^/.]+$/, "") }));
+      }
+      return updated;
+    });
   };
 
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
-    if (!uploadData.file || !uploadData.title.trim()) {
-      toast.error('Please enter a document title and pick a file.');
+    if (uploadFiles.length === 0) {
+      toast.error('Please select at least one document to upload.');
+      return;
+    }
+    if (uploadFiles.length === 1 && !uploadData.title.trim()) {
+      toast.error('Please enter a document title.');
       return;
     }
 
     let stageTimer = null;
+    const isBatch = uploadFiles.length > 1;
+
     try {
       setUploading(true);
       let simulatedProgress = 15;
       setUploadProgress(15);
-      setUploadStage('Uploading document to institutional repository...');
+      setUploadStage(isBatch ? `Preparing to process ${uploadFiles.length} documents...` : 'Uploading document to institutional repository...');
       
       stageTimer = setInterval(() => {
         simulatedProgress = Math.min(simulatedProgress + Math.floor(Math.random() * 5) + 3, 95);
         setUploadProgress(simulatedProgress);
         if (simulatedProgress < 35) {
-          setUploadStage('Uploading document binary file...');
+          setUploadStage(isBatch ? `Uploading batch of ${uploadFiles.length} files...` : 'Uploading document binary file...');
         } else if (simulatedProgress < 60) {
-          setUploadStage('Extracting text & analyzing document layout structures...');
+          setUploadStage('Extracting text & auto-detecting layout structures...');
         } else if (simulatedProgress < 85) {
           setUploadStage('Computing 384-dimensional semantic embeddings...');
         } else {
@@ -185,7 +208,6 @@ export default function DocumentManagementPage() {
       }, 550);
 
       const formData = new FormData();
-      formData.append('title', uploadData.title.trim());
       formData.append('department', uploadData.department || (departments[0]?.name || 'General'));
       formData.append('content_type', uploadData.content_type);
       
@@ -198,31 +220,41 @@ export default function DocumentManagementPage() {
       const allowedRoles = uploadAllowedRoles.length > 0 ? uploadAllowedRoles : ['All'];
       formData.append('allowed_roles', allowedRoles.join(','));
 
-      formData.append('file', uploadData.file);
-
-      await uploadApi.post('/documents/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      if (isBatch) {
+        uploadFiles.forEach(f => {
+          formData.append('files', f);
+        });
+        await uploadApi.post('/documents/batch-upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      } else {
+        formData.append('title', uploadData.title.trim());
+        formData.append('file', uploadFiles[0]);
+        await uploadApi.post('/documents/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      }
 
       if (stageTimer) clearInterval(stageTimer);
       setUploadProgress(100);
-      setUploadStage('Done! Document indexed and ready for AI questions.');
-      toast.success('Document uploaded and ready!');
+      setUploadStage('Done! All documents indexed and ready for AI questions.');
+      toast.success(isBatch ? `Successfully uploaded ${uploadFiles.length} documents!` : 'Document uploaded and ready!');
 
       setTimeout(() => {
         setUploadData({
           title: '',
           department: departments[0]?.name || 'General',
-          content_type: 'text_only',
-          tags: '',
-          file: null
+          content_type: 'auto',
+          tags: ''
         });
+        setUploadFiles([]);
         setUploadAllowedDepts([]);
         setUploadAllowedRoles([]);
         setUploading(false);
         setUploadProgress(0);
         setUploadStage('');
         setActiveTab('documents');
+        fetchDocuments();
       }, 900);
       
     } catch (err) {
@@ -236,8 +268,8 @@ export default function DocumentManagementPage() {
     }
   };
 
-
   const documentTypes = [
+    { value: 'auto', label: 'Auto-Detect', desc: 'Auto-scans text, OCR scans & tables (Recommended)' },
     { value: 'text_only', label: 'Standard Document', desc: 'Digital PDF with selectable text' },
     { value: 'images_only', label: 'Scanned Document', desc: 'Photocopies and scanned papers' },
     { value: 'combination', label: 'Document with Charts', desc: 'Contains diagrams, tables, and text' },
@@ -484,56 +516,93 @@ export default function DocumentManagementPage() {
           <form onSubmit={handleUploadSubmit} className="space-y-4">
             {/* File Picker */}
             <div>
-              <label className="label">Select Document (PDF or TXT, up to 50MB) *</label>
+              <label className="label">Select Document(s) (PDF or TXT, up to 50MB each) *</label>
               <div className="relative border-2 border-dashed border-[var(--color-border)] hover:border-teal rounded-2xl p-6 text-center transition-colors bg-[var(--color-surface-alt)]">
                 <input
                   type="file"
-                  required
+                  multiple
                   accept=".pdf,.txt"
                   onChange={handleFileSelect}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
                 <div className="flex flex-col items-center justify-center pointer-events-none">
                   <Upload className="w-8 h-8 text-teal mb-2" />
-                  {uploadData.file ? (
-                    <div>
-                      <span className="text-xs font-semibold text-[var(--color-text)] block">
-                        {uploadData.file.name}
-                      </span>
-                      <span className="text-[11px] text-teal mt-0.5 block">
-                        {(uploadData.file.size / 1024 / 1024).toFixed(2)} MB • Ready to upload
-                      </span>
-                    </div>
-                  ) : (
-                    <div>
-                      <span className="text-xs font-semibold text-[var(--color-text)] block">
-                        Click or drag a file to upload
-                      </span>
-                      <span className="text-[11px] text-[var(--color-text-secondary)] block mt-0.5">
-                        PDF policies, manuals, handbooks, and text files
-                      </span>
-                    </div>
-                  )}
+                  <span className="text-xs font-semibold text-[var(--color-text)] block">
+                    Click or drag files to upload (single or multiple)
+                  </span>
+                  <span className="text-[11px] text-[var(--color-text-secondary)] block mt-0.5">
+                    PDF policies, handbooks, course materials, or TXT documents
+                  </span>
                 </div>
               </div>
+
+              {/* Selected Files List */}
+              {uploadFiles.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-[var(--color-text-secondary)] px-1">
+                    <span className="font-semibold text-[var(--color-text)]">{uploadFiles.length} file{uploadFiles.length > 1 ? 's' : ''} selected</span>
+                    <button
+                      type="button"
+                      onClick={() => { setUploadFiles([]); setUploadData(prev => ({ ...prev, title: '' })); }}
+                      className="text-red-400 hover:text-red-300 text-[11px] underline"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 p-2 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]">
+                    {uploadFiles.map((file, idx) => (
+                      <div
+                        key={`${file.name}-${idx}`}
+                        className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText className="w-4 h-4 text-teal flex-shrink-0" />
+                          <span className="truncate font-medium text-[var(--color-text)]">{file.name}</span>
+                          <span className="text-[10px] text-[var(--color-text-secondary)] flex-shrink-0">
+                            ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeFile(idx)}
+                          className="p-1 text-[var(--color-text-secondary)] hover:text-red-400 rounded transition-colors"
+                          title="Remove file"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div>
-              <label className="label">Document Title *</label>
-              <input
-                type="text"
-                required
-                value={uploadData.title}
-                onChange={e => setUploadData({ ...uploadData, title: e.target.value })}
-                placeholder="e.g. Leave Policy 2026 or Course Syllabus"
-                className="input-field text-xs py-2"
-              />
-            </div>
+            {/* Document Title or Batch Info */}
+            {uploadFiles.length <= 1 ? (
+              <div>
+                <label className="label">Document Title *</label>
+                <input
+                  type="text"
+                  required={uploadFiles.length === 1}
+                  value={uploadData.title}
+                  onChange={e => setUploadData({ ...uploadData, title: e.target.value })}
+                  placeholder="e.g. Leave Policy 2026 or Course Syllabus"
+                  className="input-field text-xs py-2"
+                />
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl bg-teal/5 border border-teal/20 text-xs text-[var(--color-text-secondary)]">
+                <div className="font-semibold text-teal flex items-center gap-1.5 mb-1">
+                  <Sparkles size={14} /> Batch Upload Mode Active
+                </div>
+                Each of the <span className="text-[var(--color-text)] font-semibold">{uploadFiles.length} documents</span> will be indexed with its individual file name as the title, automatically analyzing content type and applying permissions across the batch.
+              </div>
+            )}
 
             {/* Document Type Picker */}
             <div>
               <label className="label">Document Format</label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {documentTypes.map((mode) => (
                   <button
                     key={mode.value}
@@ -541,7 +610,7 @@ export default function DocumentManagementPage() {
                     onClick={() => setUploadData({ ...uploadData, content_type: mode.value })}
                     className={`p-3 rounded-xl border text-left transition-all ${
                       uploadData.content_type === mode.value
-                        ? 'border-teal bg-teal/10 shadow-sm'
+                        ? 'border-teal bg-teal/10 shadow-sm ring-1 ring-teal/30'
                         : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-text-secondary)]'
                     }`}
                   >
@@ -647,13 +716,13 @@ export default function DocumentManagementPage() {
 
             <Button 
               type="submit" 
-              disabled={uploading || !uploadData.file || !uploadData.title.trim()} 
+              disabled={uploading || uploadFiles.length === 0 || (uploadFiles.length === 1 && !uploadData.title.trim())} 
               loading={uploading}
               variant="primary"
               className="w-full py-2.5 text-xs shadow-md"
               icon={Upload}
             >
-              Upload Document
+              {uploadFiles.length > 1 ? `Upload & Index ${uploadFiles.length} Documents` : 'Upload Document'}
             </Button>
           </form>
         </Card>
