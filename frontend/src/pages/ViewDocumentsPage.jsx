@@ -421,12 +421,12 @@ export default function ViewDocumentsPage() {
       >
         <form onSubmit={handleUploadSubmit} className="space-y-4">
           <div>
-            <label className="label">Select File(s) (PDF or TXT, up to 50MB each) *</label>
+            <label className="label">Select File(s) (PDF, Word DOCX/DOC, TXT, or Images up to 50MB each) *</label>
             <div className="relative border-2 border-dashed border-[var(--color-border)] hover:border-teal rounded-xl p-4 text-center transition-colors bg-[var(--color-surface-alt)]">
               <input
                 type="file"
                 multiple
-                accept=".pdf,.txt"
+                accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg,.webp"
                 onChange={handleFileSelect}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
@@ -436,7 +436,7 @@ export default function ViewDocumentsPage() {
                   Click or drag files to upload (single or multiple)
                 </span>
                 <span className="text-[11px] text-[var(--color-text-secondary)] block mt-0.5">
-                  PDF policies, syllabi, handbooks, or TXT documents
+                  PDF policies, Word documents (DOCX/DOC), handbooks, or scanned images
                 </span>
               </div>
             </div>

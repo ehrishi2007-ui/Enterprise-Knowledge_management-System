@@ -569,12 +569,12 @@ export default function DocumentManagementPage() {
           <form onSubmit={handleUploadSubmit} className="space-y-4">
             {/* File Picker */}
             <div>
-              <label className="label">Select Document(s) (PDF, TXT, or Scanned Images up to 50MB each) *</label>
+              <label className="label">Select Document(s) (PDF, Word DOCX/DOC, TXT, or Scanned Images up to 50MB each) *</label>
               <div className="relative border-2 border-dashed border-[var(--color-border)] hover:border-teal rounded-2xl p-6 text-center transition-colors bg-[var(--color-surface-alt)]">
                 <input
                   type="file"
                   multiple
-                  accept=".pdf,.txt,.png,.jpg,.jpeg,.webp"
+                  accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg,.webp"
                   onChange={handleFileSelect}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
@@ -584,7 +584,7 @@ export default function DocumentManagementPage() {
                     Click or drag files to upload (single or multiple)
                   </span>
                   <span className="text-[11px] text-[var(--color-text-secondary)] block mt-0.5">
-                    PDF policies, handbooks, photocopies, or scanned images (PNG, JPG, WEBP)
+                    PDF policies, Word documents (DOCX/DOC), handbooks, photocopies, or scanned images (PNG, JPG, WEBP)
                   </span>
                 </div>
               </div>

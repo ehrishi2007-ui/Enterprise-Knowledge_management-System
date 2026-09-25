@@ -372,6 +372,16 @@ async def get_document_file(
             media_type = "application/pdf"
         elif filename.lower().endswith(".txt"):
             media_type = "text/plain; charset=utf-8"
+        elif filename.lower().endswith(".docx"):
+            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        elif filename.lower().endswith(".doc"):
+            media_type = "application/msword"
+        elif filename.lower().endswith(".png"):
+            media_type = "image/png"
+        elif filename.lower().endswith((".jpg", ".jpeg")):
+            media_type = "image/jpeg"
+        elif filename.lower().endswith(".webp"):
+            media_type = "image/webp"
         else:
             media_type = "application/octet-stream"
             
@@ -396,6 +406,41 @@ async def download_document_file(
 ):
     """Direct download endpoint with attachment header."""
     return await get_document_file(document_id, download=True, current_user=current_user, supabase=supabase)
+
+@router.get("/{document_id}/text")
+async def get_document_text(
+    document_id: str,
+    current_user: dict = Depends(get_current_user_flexible),
+    supabase = Depends(get_supabase_client)
+):
+    """Retrieve the clean text/markdown representation of any document (DOCX, TXT, OCR) for reading."""
+    try:
+        resp = supabase.table("documents").select("*").eq("id", document_id).execute()
+        if not resp.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+        doc = resp.data[0]
+        filename = doc.get("filename", "")
+        storage_path = doc.get("storage_path") or f"{document_id}/{filename}"
+
+        file_bytes = supabase.storage.from_("documents").download(storage_path)
+
+        meta = dict(doc)
+        meta["document_id"] = document_id
+        meta["allowed_roles"] = ["All"]
+        chunks = document_processor.process_document(
+            file_bytes=file_bytes,
+            filename=filename,
+            document_id=document_id,
+            metadata=meta,
+            content_type=doc.get("content_type", "auto")
+        )
+        full_text = "\n\n".join(c.page_content for c in chunks)
+        return Response(content=full_text, media_type="text/plain; charset=utf-8")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching document text for {document_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to extract document text")
 
 @router.delete("/{document_id}", response_model=MessageResponse)
 async def delete_document(

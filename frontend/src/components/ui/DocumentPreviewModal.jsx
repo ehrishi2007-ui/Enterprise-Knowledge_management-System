@@ -15,6 +15,7 @@ export default function DocumentPreviewModal({ isOpen, onClose, doc }) {
   const activeBlobUrlRef = useRef(null);
 
   const isPdf = doc?.file_type === 'pdf' || doc?.filename?.toLowerCase().endsWith('.pdf');
+  const isDocx = doc?.filename?.toLowerCase().endsWith('.docx') || doc?.filename?.toLowerCase().endsWith('.doc');
   const isTxt = doc?.file_type === 'txt' || doc?.filename?.toLowerCase().endsWith('.txt');
 
   // Clean up object URLs
@@ -61,9 +62,9 @@ export default function DocumentPreviewModal({ isOpen, onClose, doc }) {
           }
           setLoading(false);
         });
-    } else if (isTxt) {
-      // Fetch text content
-      api.get(`/documents/${doc.id}/file`, { responseType: 'text' })
+    } else if (isDocx || isTxt) {
+      // Fetch text/markdown representation
+      api.get(`/documents/${doc.id}/text`, { responseType: 'text' })
         .then((res) => {
           setTextContent(res.data);
           setLoading(false);
@@ -73,10 +74,19 @@ export default function DocumentPreviewModal({ isOpen, onClose, doc }) {
           const status = err.response?.status;
           if (status === 403) {
             setErrorMessage('Access Denied: Your role does not have permission to view this document.');
+            setLoading(false);
           } else {
-            setErrorMessage('Unable to load document text content.');
+            // Fallback to /file
+            api.get(`/documents/${doc.id}/file`, { responseType: 'text' })
+              .then((res2) => {
+                setTextContent(res2.data);
+                setLoading(false);
+              })
+              .catch(() => {
+                setErrorMessage('Unable to load document text content. Please use Download to view.');
+                setLoading(false);
+              });
           }
-          setLoading(false);
         });
     } else {
       setLoading(false);
@@ -85,7 +95,7 @@ export default function DocumentPreviewModal({ isOpen, onClose, doc }) {
     return () => {
       cleanupBlob();
     };
-  }, [isOpen, doc?.id, isPdf, isTxt]);
+  }, [isOpen, doc?.id, isPdf, isDocx, isTxt]);
 
   if (!doc) return null;
 
@@ -301,10 +311,20 @@ export default function DocumentPreviewModal({ isOpen, onClose, doc }) {
                         </div>
                       </object>
                     </div>
-                  ) : isTxt ? (
+                  ) : (isTxt || isDocx) ? (
                     <div className="w-full h-full rounded-xl border border-[var(--color-border)] p-4 overflow-y-auto bg-[var(--color-surface-alt)]">
+                      {isDocx && (
+                        <div className="mb-3 pb-2 border-b border-[var(--color-border)] flex items-center justify-between text-xs text-[var(--color-text-secondary)]">
+                          <span className="font-semibold text-teal flex items-center gap-1.5">
+                            <FileText size={14} /> Word Document Reader View
+                          </span>
+                          <span className="text-[11px] px-2 py-0.5 rounded bg-teal/10 text-teal font-mono">
+                            Formatted Markdown
+                          </span>
+                        </div>
+                      )}
                       <pre className="font-mono text-xs text-[var(--color-text)] whitespace-pre-wrap leading-relaxed select-text">
-                        {textContent}
+                        {textContent || 'No text content available.'}
                       </pre>
                     </div>
                   ) : (

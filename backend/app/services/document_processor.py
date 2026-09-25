@@ -430,6 +430,113 @@ class DocumentProcessor:
             logger.error(f"Error processing image document {document_id}: {e}", exc_info=True)
             return []
 
+    def process_docx(
+        self, file_bytes: bytes, filename: str, document_id: str, metadata: dict[str, Any]
+    ) -> List[Document]:
+        """Extract structured text, headings, and tables from a Word document (.docx / .doc)."""
+        import io
+        doc_name = metadata.get("title", metadata.get("filename", filename))
+        department = metadata.get("department", "All")
+        tags = metadata.get("tags", [])
+        allowed_depts = metadata.get("allowed_departments", ["All"])
+        allowed_str = ",".join(allowed_depts) if isinstance(allowed_depts, list) else str(allowed_depts)
+        allowed_roles = metadata.get("allowed_roles", ["All"])
+        allowed_roles_str = ",".join(allowed_roles) if isinstance(allowed_roles, list) else str(allowed_roles)
+        is_public = ("All" in allowed_str) or ("General" in allowed_str) or (department in ["All", "General"]) or (not allowed_str)
+
+        full_text = ""
+        filename_lower = filename.lower()
+
+        # Handle modern .docx using python-docx
+        if filename_lower.endswith(".docx"):
+            try:
+                import docx
+                doc = docx.Document(io.BytesIO(file_bytes))
+                sections = []
+
+                for block in doc.element.body:
+                    tag = block.tag.split("}")[-1] if "}" in block.tag else block.tag
+                    if tag == "p":
+                        p = docx.text.paragraph.Paragraph(block, doc)
+                        text = p.text.strip()
+                        if not text:
+                            continue
+                        style_name = p.style.name.lower() if p.style else ""
+                        if "heading 1" in style_name:
+                            sections.append(f"\n# {text}\n")
+                        elif "heading 2" in style_name:
+                            sections.append(f"\n## {text}\n")
+                        elif "heading 3" in style_name:
+                            sections.append(f"\n### {text}\n")
+                        elif "list" in style_name:
+                            sections.append(f"- {text}")
+                        else:
+                            sections.append(text)
+                    elif tag == "tbl":
+                        table = docx.table.Table(block, doc)
+                        if not table.rows:
+                            continue
+                        table_md = []
+                        header_cells = [c.text.strip().replace("\n", " ") for c in table.rows[0].cells]
+                        table_md.append("| " + " | ".join(header_cells) + " |")
+                        table_md.append("| " + " | ".join(["---"] * len(header_cells)) + " |")
+                        for row in table.rows[1:]:
+                            row_cells = [c.text.strip().replace("\n", " ") for c in row.cells]
+                            table_md.append("| " + " | ".join(row_cells) + " |")
+                        sections.append("\n" + "\n".join(table_md) + "\n")
+
+                full_text = "\n\n".join(sections).strip()
+            except Exception as docx_err:
+                logger.warning(f"python-docx failed for {filename}: {docx_err}. Attempting binary stream fallback.")
+
+        # Fallback / legacy .doc format
+        if not full_text:
+            text_pieces = []
+            utf16_matches = re.findall(rb'(?:[\x20-\x7e]\x00){4,}', file_bytes)
+            for m in utf16_matches:
+                try:
+                    s = m.decode('utf-16le').strip()
+                    if len(s) > 3 and not s.startswith(('Normal', 'Heading', 'Default', 'Times New')):
+                        text_pieces.append(s)
+                except Exception:
+                    pass
+            if not text_pieces:
+                ascii_matches = re.findall(rb'[\x20-\x7e\n\r\t]{4,}', file_bytes)
+                for m in ascii_matches:
+                    try:
+                        s = m.decode('latin-1').strip()
+                        if len(s) > 3:
+                            text_pieces.append(s)
+                    except Exception:
+                        pass
+            full_text = "\n\n".join(text_pieces).strip()
+
+        if not full_text:
+            logger.error(f"Could not extract text from Word document {filename}")
+            return []
+
+        raw_doc = Document(
+            page_content=full_text,
+            metadata={
+                "document_id": document_id,
+                "document_name": doc_name,
+                "title": doc_name,
+                "page": 1,
+                "page_number": 1,
+                "department": department,
+                "allowed_departments": allowed_str,
+                "allowed_roles": allowed_roles_str,
+                "is_public": is_public,
+                "tags": tags,
+            }
+        )
+        chunk_docs = self.text_splitter.split_documents([raw_doc])
+        for i, chunk in enumerate(chunk_docs):
+            chunk.metadata["chunk_index"] = i
+
+        logger.info(f"Generated {len(chunk_docs)} LangChain chunks from Word document {document_id}")
+        return chunk_docs
+
     def detect_content_type(self, file_bytes: bytes, filename: str) -> str:
         """Intelligently inspects document content and returns one of:
         - 'text_only': Standard digital text documents
@@ -437,6 +544,9 @@ class DocumentProcessor:
         - 'combination': Documents containing text alongside embedded tables, charts, or diagrams
         """
         filename_lower = filename.lower()
+        if filename_lower.endswith((".docx", ".doc")):
+            return "text_only"
+
         if filename_lower.endswith((".png", ".jpg", ".jpeg", ".webp")):
             return "images_only"
 
@@ -527,6 +637,8 @@ class DocumentProcessor:
                 return self.process_hybrid_pdf(file_bytes, document_id, metadata)
             else:
                 return self.process_text_pdf(file_bytes, document_id, metadata)
+        elif filename_lower.endswith((".docx", ".doc")):
+            return self.process_docx(file_bytes, filename, document_id, metadata)
         elif filename_lower.endswith((".png", ".jpg", ".jpeg", ".webp")):
             return self.process_image(file_bytes, filename, document_id, metadata)
         elif filename_lower.endswith(".txt"):
@@ -539,7 +651,7 @@ class DocumentProcessor:
         else:
             logger.error(f"Unsupported file format: {filename}")
             raise ValueError(
-                f"Unsupported file format for {filename}. Supported formats: PDF, TXT, PNG, JPG, JPEG, WEBP."
+                f"Unsupported file format for {filename}. Supported formats: PDF, DOCX, DOC, TXT, PNG, JPG, JPEG, WEBP."
             )
 
 
