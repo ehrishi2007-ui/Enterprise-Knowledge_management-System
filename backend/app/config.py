@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     
     # Gemini
     GEMINI_API_KEY: str
-    GEMINI_MODEL: str = "gemini-3.5-flash"
+    GEMINI_MODEL: str = "gemini-3.1-flash-lite"
     
     # ChromaDB
     CHROMA_HOST: str = "localhost"
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # RAG Configuration
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
-    TOP_K_RESULTS: int = 5
+    TOP_K_RESULTS: int = 8
     DEFAULT_TEMPERATURE: float = 0.3
     DEFAULT_MAX_TOKENS: int = 4096
     

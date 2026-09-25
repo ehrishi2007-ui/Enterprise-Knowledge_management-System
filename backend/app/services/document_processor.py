@@ -34,7 +34,7 @@ class DocumentProcessor:
 
     def generate_content_with_fallback(self, contents: list, primary_model: Optional[str] = None):
         """Generate content with model fallbacks to survive quota and high demand spikes."""
-        candidates = [primary_model or settings.GEMINI_MODEL, "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
+        candidates = [primary_model or settings.GEMINI_MODEL, "gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash"]
         seen = set()
         unique_candidates = []
         for m in candidates:

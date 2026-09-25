@@ -1,5 +1,6 @@
 """The core RAG pipeline using LangChain and Google Gemini."""
 
+import re
 import time
 import logging
 from typing import List, Dict, Any
@@ -78,16 +79,18 @@ class RAGPipeline:
             ai_settings = self.get_ai_settings(supabase_client)
             
             # 2. Retrieve relevant candidates using LangChain Chroma
-            # Retrieve enough candidates to apply accurate permission filtering
-            candidate_k = max(ai_settings["top_k"] * 3, 12)
-            logger.info(f"Retrieving top candidates for user_role '{user_role}', user_dept '{user_department}' with model {ai_settings['model_name']} for question: '{question}'")
+            # Retrieve enough candidates to apply accurate permission filtering & deduplication
+            target_top_k = max(ai_settings.get("top_k", 8), 8)
+            candidate_k = max(target_top_k * 4, 30)
+            logger.info(f"Retrieving top {candidate_k} candidates for user_role '{user_role}', user_dept '{user_department}' with model {ai_settings['model_name']} for question: '{question}'")
             candidate_docs = chroma_service.similarity_search(
                 query=question,
                 k=candidate_k
             )
             
-            # 3. Apply RBAC (Department + Role) filtering in Python
+            # 3. Apply RBAC (Department + Role) filtering in Python & cross-document deduplication
             retrieved_docs = []
+            seen_signatures = set()
             for doc in candidate_docs:
                 meta = doc.metadata or {}
                 doc_dept = meta.get("department", "All")
@@ -118,10 +121,20 @@ class RAGPipeline:
                         user_department in allowed_list
                     )
                 
-                if is_dept_permitted:
-                    retrieved_docs.append(doc)
+                if not is_dept_permitted:
+                    continue
+
+                # Cross-document deduplication (prevents duplicate documents from monopolizing top-k)
+                cleaned = re.sub(r'\[.*?\]\(.*?\)|!\[.*?\]\(.*?\)|[^a-zA-Z0-9]', '', doc.page_content.lower())
+                signature = cleaned[:80]
+                if signature and signature in seen_signatures:
+                    continue
+                if signature:
+                    seen_signatures.add(signature)
+
+                retrieved_docs.append(doc)
                         
-                if len(retrieved_docs) >= ai_settings["top_k"]:
+                if len(retrieved_docs) >= target_top_k:
                     break
             
             # 4. Extract structured sources for the frontend
@@ -167,7 +180,7 @@ class RAGPipeline:
             # 7. Model fallback list with rapid failover (max_retries=1, timeout=15s)
             primary_model = ai_settings.get("model_name") or settings.GEMINI_MODEL
             candidate_models = [primary_model]
-            for fb in ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"]:
+            for fb in ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash"]:
                 if fb not in candidate_models:
                     candidate_models.append(fb)
 
