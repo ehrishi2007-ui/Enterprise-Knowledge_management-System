@@ -14,6 +14,7 @@ from app.routers.settings import router as settings_router
 from app.routers.announcements import router as announcements_router
 from app.routers.departments import router as departments_router
 from app.routers.roles import router as roles_router
+from app.routers.metrics import router as metrics_router
 
 logger = logging.getLogger(__name__)
 
@@ -85,3 +86,4 @@ app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
 app.include_router(announcements_router, prefix="/api/announcements", tags=["Announcements"])
 app.include_router(departments_router, prefix="/api/departments", tags=["Departments"])
 app.include_router(roles_router, prefix="/api/roles", tags=["Roles & Permissions"])
+app.include_router(metrics_router, prefix="/api/metrics", tags=["Metrics"])

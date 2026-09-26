@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel
 
 from app.config import settings
@@ -13,6 +13,7 @@ from app.models.schemas import (
     EmployeeDashboard
 )
 from app.services.rag_pipeline import rag_pipeline
+from app.services import metrics_service
 
 router = APIRouter(tags=["Chat"])
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 @router.post("/ask", response_model=ChatResponse)
 async def ask_question(
     request: ChatRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
     supabase = Depends(get_supabase_client)
 ):
@@ -42,7 +44,7 @@ async def ask_question(
         history_resp = supabase.table("chat_messages").select("*").eq("conversation_id", conversation_id).order("created_at", desc=True).limit(10).execute()
         history = history_resp.data[::-1] if history_resp.data else [] # reverse to chronological
         
-        # Call RAG pipeline (returns dict with answer, sources, response_time_ms)
+        # Call RAG pipeline (returns dict with answer, sources, response_time_ms, _metrics_data)
         # Use user-selected department filter if provided; otherwise search all accessible documents
         if request.department and request.department != "All":
             dept_filter = request.department
@@ -60,6 +62,10 @@ async def ask_question(
         answer_text = rag_result.get("answer", "")
         sources = rag_result.get("sources", [])
         response_time_ms = rag_result.get("response_time_ms", 0)
+        had_error = bool(rag_result.get("error"))
+
+        # Extract metrics data (internal, not returned to user)
+        metrics_data = rag_result.get("_metrics_data", {})
         
         # Store user message
         supabase.table("chat_messages").insert({
@@ -81,6 +87,21 @@ async def ask_question(
         supabase.table("conversations").update({"updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(conversation_id)).execute()
         
         message_id = msg_resp.data[0]["id"] if msg_resp.data else None
+
+        # Fire metrics computation as a background task (zero latency impact on user)
+        if metrics_data:
+            background_tasks.add_task(
+                metrics_service.compute_and_save,
+                message_id=str(message_id) if message_id else None,
+                user_id=str(current_user["id"]),
+                question=request.question,
+                answer=answer_text,
+                candidate_docs_with_scores=metrics_data.get("candidate_docs_with_scores", []),
+                retrieved_docs_with_scores=metrics_data.get("retrieved_docs_with_scores", []),
+                response_time_ms=response_time_ms,
+                had_error=had_error,
+                supabase_client=supabase,
+            )
         
         return ChatResponse(
             conversation_id=conversation_id,
@@ -92,6 +113,7 @@ async def ask_question(
     except Exception as e:
         logger.error(f"Error in ask: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An error occurred while processing the request.")
+
 
 @router.get("/conversations", response_model=List[ConversationSummary])
 async def list_conversations(

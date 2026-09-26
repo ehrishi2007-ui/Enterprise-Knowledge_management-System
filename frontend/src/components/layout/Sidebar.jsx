@@ -5,19 +5,20 @@ import { ROLE_CONFIG } from '../../lib/constants';
 import { 
   LayoutDashboard, Users, FileText, 
   Settings, Bot, Search, BookOpen, Bookmark, LogOut, 
-  ChevronLeft, ChevronRight, GraduationCap
+  ChevronLeft, ChevronRight, GraduationCap, BarChart2
 } from 'lucide-react';
 
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
   const { user, logout } = useAuth();
 
   const adminLinks = [
-    { name: 'Dashboard', to: '/admin/dashboard', icon: LayoutDashboard },
-    { name: 'Ask AI', to: '/employee/chat', icon: Bot },
-    { name: 'Search', to: '/employee/search', icon: Search },
-    { name: 'Documents', to: '/admin/documents', icon: FileText },
-    { name: 'Members', to: '/admin/users', icon: Users },
-    { name: 'Settings', to: '/admin/settings', icon: Settings },
+    { name: 'Dashboard',   to: '/admin/dashboard', icon: LayoutDashboard },
+    { name: 'Ask AI',      to: '/employee/chat',   icon: Bot },
+    { name: 'Search',      to: '/employee/search', icon: Search },
+    { name: 'Documents',   to: '/admin/documents', icon: FileText },
+    { name: 'Members',     to: '/admin/users',     icon: Users },
+    { name: 'AI Metrics',  to: '/admin/metrics',   icon: BarChart2 },
+    { name: 'Settings',    to: '/admin/settings',  icon: Settings },
   ];
 
   const employeeLinks = [

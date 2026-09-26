@@ -21,6 +21,7 @@ import DepartmentDetailsPage from './pages/DepartmentDetailsPage';
 import BookmarksPage from './pages/BookmarksPage';
 import FeedbackPage from './pages/FeedbackPage';
 import SettingsPage from './pages/SettingsPage';
+import MetricsDashboardPage from './pages/MetricsDashboardPage';
 
 function AppLayout({ children }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -47,6 +48,7 @@ function AppLayout({ children }) {
       departments: 'Departments & Units',
       feedback: 'Feedback & Analytics',
       settings: 'System Configuration',
+      metrics: 'AI Evaluation Metrics',
     };
     return titles[page] || (page.charAt(0).toUpperCase() + page.slice(1));
   };
@@ -103,13 +105,14 @@ function AppRoutes() {
           ) : (
             <AppLayout>
               <Routes>
-                <Route path="dashboard" element={<AdminDashboardPage />} />
-                <Route path="users" element={<UserManagementPage />} />
-                <Route path="documents" element={<DocumentManagementPage />} />
+                <Route path="dashboard"   element={<AdminDashboardPage />} />
+                <Route path="users"       element={<UserManagementPage />} />
+                <Route path="documents"   element={<DocumentManagementPage />} />
                 <Route path="departments" element={<DepartmentDetailsPage />} />
-                <Route path="feedback" element={<FeedbackPage />} />
-                <Route path="settings" element={<SettingsPage />} />
-                <Route path="*" element={<Navigate to="dashboard" replace />} />
+                <Route path="feedback"    element={<FeedbackPage />} />
+                <Route path="settings"    element={<SettingsPage />} />
+                <Route path="metrics"     element={<MetricsDashboardPage />} />
+                <Route path="*"           element={<Navigate to="dashboard" replace />} />
               </Routes>
             </AppLayout>
           )

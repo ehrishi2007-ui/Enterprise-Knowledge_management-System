@@ -78,20 +78,22 @@ class RAGPipeline:
             # 1. Fetch AI & RAG settings
             ai_settings = self.get_ai_settings(supabase_client)
             
-            # 2. Retrieve relevant candidates using LangChain Chroma
+            # 2. Retrieve relevant candidates using LangChain Chroma (with scores for metrics)
             # Retrieve enough candidates to apply accurate permission filtering & deduplication
             target_top_k = max(ai_settings.get("top_k", 8), 8)
             candidate_k = max(target_top_k * 4, 30)
             logger.info(f"Retrieving top {candidate_k} candidates for user_role '{user_role}', user_dept '{user_department}' with model {ai_settings['model_name']} for question: '{question}'")
-            candidate_docs = chroma_service.similarity_search(
+            # Use scored search so similarity scores are available for IR metrics
+            candidate_docs_with_scores = chroma_service.similarity_search_with_relevance_scores(
                 query=question,
                 k=candidate_k
             )
             
             # 3. Apply RBAC (Department + Role) filtering in Python & cross-document deduplication
             retrieved_docs = []
+            retrieved_docs_with_scores = []   # Post-RBAC docs with their scores (for metrics)
             seen_signatures = set()
-            for doc in candidate_docs:
+            for doc, score in candidate_docs_with_scores:
                 meta = doc.metadata or {}
                 doc_dept = meta.get("department", "All")
                 allowed_depts = meta.get("allowed_departments", "All")
@@ -133,6 +135,7 @@ class RAGPipeline:
                     seen_signatures.add(signature)
 
                 retrieved_docs.append(doc)
+                retrieved_docs_with_scores.append((doc, score))   # Track score alongside doc
                         
                 if len(retrieved_docs) >= target_top_k:
                     break
@@ -237,7 +240,13 @@ class RAGPipeline:
             return {
                 "answer": answer_text,
                 "sources": sources,
-                "response_time_ms": response_time_ms
+                "response_time_ms": response_time_ms,
+                # Internal data consumed by chat.py to fire the background metrics task.
+                # Prefixed with _ to signal it is not part of the public API response.
+                "_metrics_data": {
+                    "candidate_docs_with_scores": candidate_docs_with_scores,
+                    "retrieved_docs_with_scores": retrieved_docs_with_scores,
+                },
             }
             
         except Exception as e:
