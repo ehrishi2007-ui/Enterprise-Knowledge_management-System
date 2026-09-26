@@ -40,6 +40,39 @@ def set_doc_roles(supabase, doc_id: str, roles: List[str]):
         logger.error(f"Failed to save doc roles for {doc_id}: {e}")
 
 
+def with_network_retry(func, max_retries=3, initial_delay=1.0, backoff=2.0):
+    """Executes func with exponential backoff on transient DNS (Errno 11001) or connection errors."""
+    import time
+    import socket
+    delay = initial_delay
+    last_exception = None
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except Exception as e:
+            last_exception = e
+            err_str = str(e).lower()
+            is_transient = (
+                "11001" in err_str or
+                "getaddrinfo" in err_str or
+                "name resolution" in err_str or
+                "connection reset" in err_str or
+                "connecterror" in err_str or
+                "remotedisconnected" in err_str or
+                "timeout" in err_str or
+                isinstance(e, (socket.gaierror, ConnectionError, TimeoutError))
+            )
+            if is_transient and attempt < max_retries - 1:
+                logger.warning(
+                    f"Transient network/DNS error ({e}). "
+                    f"Retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})..."
+                )
+                time.sleep(delay)
+                delay *= backoff
+            else:
+                raise last_exception
+
+
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
     title: Optional[str] = Form(None),
@@ -125,9 +158,15 @@ async def upload_document(
         # Save document roles to settings mapping
         set_doc_roles(supabase, document_id, allowed_roles_list)
         
-        # Upload file to Supabase storage
+        # Upload file to Supabase storage with automatic retry
         storage_path = f"{document_id}/{upload_filename}"
-        supabase.storage.from_("documents").upload(storage_path, upload_bytes)
+        with_network_retry(
+            lambda: supabase.storage.from_("documents").upload(
+                storage_path,
+                upload_bytes,
+                file_options={"upsert": "true"}
+            )
+        )
         
         metadata = {
             "id": document_id,
@@ -144,15 +183,15 @@ async def upload_document(
             "processing_status": "processing"
         }
         
-        # Insert into documents table with resilient fallback for demo users & schema cache
+        # Insert into documents table with resilient retry and foreign key fallback
         db_metadata = {k: v for k, v in metadata.items() if k != "allowed_roles"}
         try:
-            doc_resp = supabase.table("documents").insert(db_metadata).execute()
+            doc_resp = with_network_retry(lambda: supabase.table("documents").insert(db_metadata).execute())
         except Exception as insert_err:
             if "violates foreign key constraint" in str(insert_err) and db_metadata.get("uploaded_by"):
                 logger.warning(f"FK violation on uploaded_by, retrying with None: {insert_err}")
                 db_metadata["uploaded_by"] = None
-                doc_resp = supabase.table("documents").insert(db_metadata).execute()
+                doc_resp = with_network_retry(lambda: supabase.table("documents").insert(db_metadata).execute())
             else:
                 raise insert_err
 
@@ -164,33 +203,48 @@ async def upload_document(
         processor_metadata = dict(metadata)
         processor_metadata["allowed_roles"] = allowed_roles_list
 
-        chunks = document_processor.process_document(
-            file_bytes=file_bytes,
-            filename=file.filename,
-            document_id=document_id,
-            metadata=processor_metadata,
-            content_type=content_type
-        )
-        chunk_count = len(chunks)
-        
-        if chunk_count > 0:
-            # Store LangChain Documents in ChromaDB (auto-computes embeddings)
-            chroma_service.add_documents(chunks)
-        
+        chunk_count = 0
+        processing_status = "completed"
+        try:
+            chunks = document_processor.process_document(
+                file_bytes=file_bytes,
+                filename=file.filename,
+                document_id=document_id,
+                metadata=processor_metadata,
+                content_type=content_type
+            )
+            chunk_count = len(chunks)
+            if chunk_count > 0:
+                chroma_service.add_documents(chunks)
+        except Exception as proc_err:
+            logger.error(f"Error processing chunks for {document_id} ({file.filename}): {proc_err}", exc_info=True)
+            processing_status = "failed"
+
         # Update processing status
-        updated_doc_resp = supabase.table("documents").update({
-            "processing_status": "completed",
-            "chunk_count": chunk_count
-        }).eq("id", document_id).execute()
-        
-        res_data = updated_doc_resp.data[0]
+        try:
+            updated_doc_resp = with_network_retry(
+                lambda: supabase.table("documents").update({
+                    "processing_status": processing_status,
+                    "chunk_count": chunk_count
+                }).eq("id", document_id).execute()
+            )
+            res_data = updated_doc_resp.data[0] if updated_doc_resp.data else metadata
+        except Exception as update_err:
+            logger.warning(f"Failed to update document status for {document_id}: {update_err}")
+            res_data = metadata
+            res_data["processing_status"] = processing_status
+            res_data["chunk_count"] = chunk_count
+
         res_data["allowed_roles"] = allowed_roles_list
         return DocumentResponse(**res_data)
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error uploading document: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to upload document: {str(e)}")
+        err_msg = str(e)
+        if "11001" in err_msg or "getaddrinfo" in err_msg.lower():
+            err_msg = "Network connection / DNS lookup error. Please check your internet connection and try again."
+        logger.error(f"Error uploading document: {err_msg}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to upload document: {err_msg}")
 
 @router.post("/batch-upload", response_model=List[DocumentResponse])
 async def batch_upload_documents(

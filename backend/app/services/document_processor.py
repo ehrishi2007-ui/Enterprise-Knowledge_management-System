@@ -34,8 +34,8 @@ class DocumentProcessor:
         return self._genai_client
 
     def generate_content_with_fallback(self, contents: list, primary_model: Optional[str] = None):
-        """Generate content with model fallbacks to survive quota and high demand spikes."""
-        candidates = [primary_model or settings.GEMINI_MODEL, "gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash"]
+        """Generate content with model fallbacks and network retries to survive DNS and quota glitches."""
+        candidates = [primary_model or settings.GEMINI_MODEL, "gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]
         seen = set()
         unique_candidates = []
         for m in candidates:
@@ -44,15 +44,24 @@ class DocumentProcessor:
                 unique_candidates.append(m)
 
         last_err = None
+        import time
         for model in unique_candidates:
-            try:
-                return self.genai_client.models.generate_content(
-                    model=model,
-                    contents=contents
-                )
-            except Exception as e:
-                logger.warning(f"Vision model {model} failed ({e}), trying next candidate...")
-                last_err = e
+            for retry in range(2):
+                try:
+                    return self.genai_client.models.generate_content(
+                        model=model,
+                        contents=contents
+                    )
+                except Exception as e:
+                    err_str = str(e).lower()
+                    last_err = e
+                    if "11001" in err_str or "getaddrinfo" in err_str or "connect" in err_str:
+                        logger.warning(f"Vision model {model} hit network/DNS issue ({e}). Waiting 1.5s before retry...")
+                        time.sleep(1.5)
+                        continue
+                    else:
+                        logger.warning(f"Vision model {model} failed ({e}), trying next candidate...")
+                        break
         raise last_err or RuntimeError("All vision models failed")
 
     def clean_text(self, text: str) -> str:
