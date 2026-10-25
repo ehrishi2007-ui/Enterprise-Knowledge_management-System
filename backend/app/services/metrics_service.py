@@ -5,16 +5,15 @@ Handles two categories:
                           Pure math from ChromaDB similarity scores.
                           No LLM calls, runs in microseconds.
 
-  2. RAGAS metrics      — Faithfulness, Answer Relevancy,
-                          Context Precision, Context Relevance.
+  2. RAGAS metrics      — Faithfulness, Answer Relevancy, Context Precision.
                           LLM-as-judge using Gemini. Runs async
                           in a background task after response is sent.
 
 Entry point: compute_and_save() — call as a FastAPI BackgroundTask.
-It is designed to be completely safe: never raises, never blocks the
-user-facing response.
 """
 
+import sys
+import types
 import logging
 from typing import List, Tuple, Optional, Dict, Any
 
@@ -25,8 +24,24 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # Cosine similarity score >= this value → chunk is "relevant".
-# Stored in metrics_log so it can be reviewed and tuned per deployment.
 DEFAULT_RELEVANCE_THRESHOLD = 0.5
+
+
+def _ensure_ragas_compatibility():
+    """Ensure deprecated/removed modules in newer langchain-community don't break ragas imports."""
+    if "langchain_community.chat_models.vertexai" not in sys.modules:
+        m1 = types.ModuleType("langchain_community.chat_models.vertexai")
+        class DummyChatVertexAI:
+            pass
+        m1.ChatVertexAI = DummyChatVertexAI
+        sys.modules["langchain_community.chat_models.vertexai"] = m1
+
+    if "langchain_community.llms.vertexai" not in sys.modules:
+        m2 = types.ModuleType("langchain_community.llms.vertexai")
+        class DummyVertexAI:
+            pass
+        m2.VertexAI = DummyVertexAI
+        sys.modules["langchain_community.llms.vertexai"] = m2
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -38,21 +53,7 @@ def compute_ir_metrics(
     retrieved_docs_with_scores: List[Tuple[Document, float]],
     threshold: float = DEFAULT_RELEVANCE_THRESHOLD,
 ) -> Dict[str, Any]:
-    """Compute Precision@K, Recall@K, MRR, Hit@K from scored document lists.
-
-    Args:
-        candidate_docs_with_scores:
-            Full candidate pool from ChromaDB *before* RBAC filtering,
-            with their cosine similarity scores. Used as the Recall denominator.
-        retrieved_docs_with_scores:
-            Final docs shown to Gemini *after* RBAC filtering, with scores.
-            Order matters for MRR (rank 1 = first element).
-        threshold:
-            Minimum score to count a chunk as "relevant". Default 0.5.
-
-    Returns:
-        Dict with all IR metric values ready to INSERT into metrics_log.
-    """
+    """Compute Precision@K, Recall@K, MRR, Hit@K from scored document lists."""
     k = len(retrieved_docs_with_scores)
     candidate_count = len(candidate_docs_with_scores)
 
@@ -67,35 +68,24 @@ def compute_ir_metrics(
             "hit_at_k": False,
         }
 
-    # ── Precision@K ─────────────────────────────────────────────
-    # Of the top-K retrieved chunks, how many scored >= threshold?
     relevant_retrieved = sum(1 for _, score in retrieved_docs_with_scores if score >= threshold)
     precision_at_k = relevant_retrieved / k
 
-    # ── Recall@K ────────────────────────────────────────────────
-    # Of ALL chunks in the full candidate pool that scored >= threshold
-    # (i.e., the set of "actually relevant" chunks the DB knows about),
-    # how many did we surface in the final retrieved set?
     total_relevant_in_pool = sum(
         1 for _, score in candidate_docs_with_scores if score >= threshold
     )
     recall_at_k = (
         relevant_retrieved / total_relevant_in_pool
         if total_relevant_in_pool > 0
-        else 1.0  # Nothing is relevant → nothing to miss
+        else 1.0
     )
 
-    # ── MRR — Mean Reciprocal Rank ───────────────────────────────
-    # 1 / (rank of the FIRST chunk that scored >= threshold)
-    # Rank 1 = first position in retrieved_docs_with_scores.
     mrr = 0.0
     for rank, (_, score) in enumerate(retrieved_docs_with_scores, start=1):
         if score >= threshold:
             mrr = 1.0 / rank
-            break  # Only the first relevant result matters for MRR
+            break
 
-    # ── Hit@K ────────────────────────────────────────────────────
-    # Did we retrieve at least one relevant chunk?
     hit_at_k = relevant_retrieved > 0
 
     return {
@@ -114,11 +104,8 @@ def compute_ir_metrics(
 # ══════════════════════════════════════════════════════════════════
 
 def _build_ragas_wrappers():
-    """Wrap the existing Gemini LLM and HuggingFace embeddings for RAGAS.
-
-    Reuses the same models already loaded by the RAG pipeline — no extra
-    API keys or cold-start overhead.
-    """
+    """Wrap the existing Gemini LLM and HuggingFace embeddings for RAGAS."""
+    _ensure_ragas_compatibility()
     try:
         from langchain_google_genai import ChatGoogleGenerativeAI
         from ragas.llms import LangchainLLMWrapper
@@ -128,13 +115,13 @@ def _build_ragas_wrappers():
         llm = ChatGoogleGenerativeAI(
             model=settings.GEMINI_MODEL,
             google_api_key=settings.GEMINI_API_KEY,
-            temperature=0.0,   # Deterministic judging
+            temperature=0.0,
             max_retries=1,
             timeout=30.0,
         )
         return LangchainLLMWrapper(llm), LangchainEmbeddingsWrapper(embedding_service.embeddings)
     except Exception as e:
-        logger.warning(f"Could not build RAGAS wrappers: {e}")
+        logger.error(f"[RAGAS] Failed to build RAGAS model wrappers: {e}", exc_info=True)
         return None, None
 
 
@@ -143,34 +130,20 @@ def run_ragas_eval(
     answer: str,
     contexts: List[str],
 ) -> Dict[str, Any]:
-    """Run RAGAS reference-free evaluation (no ground-truth labels needed).
-
-    Metrics computed:
-      - faithfulness:       Is the answer factually grounded in the context?
-      - answer_relevancy:   Does the answer actually address the question?
-      - context_precision:  Are the retrieved chunks relevant to the question?
-      - context_relevancy:  Is the context on-topic overall?
-
-    Args:
-        question: The original user question.
-        answer:   Gemini's generated answer.
-        contexts: List of chunk texts passed as context to Gemini.
-
-    Returns:
-        Dict with scores (0–1 floats) and a ragas_status string.
-    """
+    """Run RAGAS reference-free evaluation with visible error logging."""
+    _ensure_ragas_compatibility()
     try:
         from ragas import evaluate, EvaluationDataset, SingleTurnSample
         from ragas.metrics import (
             Faithfulness,
             AnswerRelevancy,
             LLMContextPrecisionWithoutReference,
-            LLMContextRelevance,
         )
 
         ragas_llm, ragas_embeddings = _build_ragas_wrappers()
-        if ragas_llm is None:
-            return {"ragas_status": "failed"}
+        if ragas_llm is None or ragas_embeddings is None:
+            logger.error("[RAGAS] Cannot run eval because LLM/Embeddings wrappers failed to initialize.")
+            return {"ragas_status": "failed_init"}
 
         sample = SingleTurnSample(
             user_input=question,
@@ -185,7 +158,6 @@ def run_ragas_eval(
                 Faithfulness(llm=ragas_llm),
                 AnswerRelevancy(llm=ragas_llm, embeddings=ragas_embeddings),
                 LLMContextPrecisionWithoutReference(llm=ragas_llm),
-                LLMContextRelevance(llm=ragas_llm),
             ],
         )
 
@@ -194,27 +166,20 @@ def run_ragas_eval(
         return {
             "faithfulness":       _safe_float(row.get("faithfulness")),
             "answer_relevancy":   _safe_float(row.get("answer_relevancy")),
-            # Column name differs slightly across RAGAS patch versions
             "context_precision":  _safe_float(
                 row.get("llm_context_precision_without_reference")
                 or row.get("context_precision")
             ),
-            "context_relevancy":  _safe_float(
-                row.get("llm_context_relevance")
-                or row.get("context_relevancy")
-            ),
+            "context_relevancy":  None,
             "ragas_status": "done",
         }
 
-    except ImportError:
-        logger.warning(
-            "RAGAS package not installed — generation metrics skipped. "
-            "Install with: pip install ragas>=0.2.0"
-        )
-        return {"ragas_status": "not_installed"}
+    except ImportError as ie:
+        logger.error(f"[RAGAS] Missing required RAGAS dependency: {ie}", exc_info=True)
+        return {"ragas_status": f"not_installed: {ie}"}
     except Exception as e:
-        logger.warning(f"RAGAS evaluation failed (non-critical): {e}")
-        return {"ragas_status": "failed"}
+        logger.error(f"[RAGAS] Evaluation failed with exception: {e}", exc_info=True)
+        return {"ragas_status": f"failed: {str(e)[:100]}"}
 
 
 def _safe_float(val) -> Optional[float]:
@@ -223,7 +188,7 @@ def _safe_float(val) -> Optional[float]:
         return None
     try:
         f = float(val)
-        return None if f != f else round(f, 4)  # NaN check: NaN != NaN
+        return None if f != f else round(f, 4)
     except (TypeError, ValueError):
         return None
 
@@ -244,40 +209,24 @@ def compute_and_save(
     supabase_client,
     threshold: float = DEFAULT_RELEVANCE_THRESHOLD,
 ) -> None:
-    """Compute all metrics and insert one row into metrics_log.
-
-    Designed to be called as a FastAPI BackgroundTask — never raises,
-    never blocks the user response. All failures are logged as warnings.
-
-    Args:
-        message_id:                  UUID of the assistant chat_messages row.
-        user_id:                     UUID of the user who asked the question.
-        question:                    The user's question text.
-        answer:                      Gemini's generated answer.
-        candidate_docs_with_scores:  Full ChromaDB candidate pool (pre-RBAC) with scores.
-        retrieved_docs_with_scores:  Final docs passed to Gemini (post-RBAC) with scores.
-        response_time_ms:            End-to-end latency of the RAG pipeline.
-        had_error:                   True if the pipeline returned an error answer.
-        supabase_client:             The Supabase service-role client.
-        threshold:                   Relevance score threshold (default 0.5).
-    """
+    """Compute all metrics and insert one row into metrics_log."""
     try:
-        # ── Step 1: IR metrics (instant, no LLM) ─────────────────
+        # Step 1: IR metrics
         ir = compute_ir_metrics(
             candidate_docs_with_scores=candidate_docs_with_scores,
             retrieved_docs_with_scores=retrieved_docs_with_scores,
             threshold=threshold,
         )
 
-        # ── Step 2: RAGAS metrics (LLM calls, ~5–15s) ────────────
+        # Step 2: RAGAS metrics
         contexts = [doc.page_content for doc, _ in retrieved_docs_with_scores]
         ragas = run_ragas_eval(question=question, answer=answer, contexts=contexts)
 
-        # ── Step 3: Persist ───────────────────────────────────────
+        # Step 3: Persist
         row = {
             "message_id":           message_id,
             "user_id":              user_id,
-            "question":             question[:500],      # Guard against huge questions
+            "question":             question[:500],
 
             # IR
             "retrieved_chunk_count": ir["retrieved_chunk_count"],
@@ -306,9 +255,9 @@ def compute_and_save(
             f"[Metrics] Saved | msg={message_id} | "
             f"P@K={ir['precision_at_k']:.2f} R@K={ir['recall_at_k']:.2f} "
             f"MRR={ir['mrr']:.2f} Hit={ir['hit_at_k']} | "
-            f"RAGAS={ragas.get('ragas_status')}"
+            f"RAGAS={ragas.get('ragas_status')} | "
+            f"faith={ragas.get('faithfulness')} ans_rel={ragas.get('answer_relevancy')}"
         )
 
     except Exception as e:
-        # Metric failure must never affect the user experience
-        logger.warning(f"[Metrics] compute_and_save failed (non-critical): {e}")
+        logger.error(f"[Metrics] compute_and_save failed visibly: {e}", exc_info=True)
