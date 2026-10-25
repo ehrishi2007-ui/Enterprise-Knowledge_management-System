@@ -207,10 +207,14 @@ class RAGPipeline:
 
             # 7. Model fallback list with rapid failover (max_retries=1, timeout=10s)
             primary_model = ai_settings.get("model_name") or settings.GEMINI_MODEL
-            candidate_models = [primary_model]
-            for fb in ["gemini-flash-lite-latest", "gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"]:
-                if fb not in candidate_models:
-                    candidate_models.append(fb)
+            # Prioritize stable GA models (gemini-flash-lite-latest) to eliminate 10s timeout stalls on degraded preview endpoints
+            if primary_model in ["gemini-3.1-flash-lite", "gemini-3.5-flash"]:
+                candidate_models = ["gemini-flash-lite-latest", "gemini-2.5-flash-lite", primary_model, "gemini-3.8-flash"]
+            else:
+                candidate_models = [primary_model]
+                for fb in ["gemini-flash-lite-latest", "gemini-2.5-flash-lite", "gemini-3.8-flash"]:
+                    if fb not in candidate_models:
+                        candidate_models.append(fb)
 
             response = None
             last_err = None
