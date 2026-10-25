@@ -1,0 +1,317 @@
+[
+  {
+    "id": "eval_001",
+    "question": "What is the formula used to calculate the CDC Score?",
+    "expected_answer": "CDC Score = (0.40 * Consistency Score) + (0.60 * Performance Score)",
+    "target_document": "CDC Band classification policy",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["Consistency Score", "Performance Score", "0.40", "0.60"]
+  },
+  {
+    "id": "eval_002",
+    "question": "What is the minimum attendance requirement in weekly tests for Consistency Score calculation?",
+    "expected_answer": "Students must attend a minimum 70% of weekly tests to be eligible.",
+    "target_document": "CDC Band classification policy",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["70%", "minimum", "weekly tests"]
+  },
+  {
+    "id": "eval_003",
+    "question": "What are the primary objectives of the Student Progression Framework (SPF)?",
+    "expected_answer": "To enable every student to graduate in 4 years and have a career option ready by graduation.",
+    "target_document": "SPF Banding 2026-2027",
+    "department": "CSD",
+    "role": "employee",
+    "keywords": ["Graduate in 4 years", "career option"]
+  },
+  {
+    "id": "eval_004",
+    "question": "How many bands are students classified into under the SPF?",
+    "expected_answer": "Students are classified into four bands: Band A, Band B, Band C, and Band D.",
+    "target_document": "SPF Banding 2026-2027",
+    "department": "CSD",
+    "role": "employee",
+    "keywords": ["four bands", "A", "B", "C", "D"]
+  },
+  {
+    "id": "eval_005",
+    "question": "Do students require special permission to participate in extracurricular activities under SPF?",
+    "expected_answer": "No additional permissions are required for Band A and B depending on criteria, while specific permissions are outlined per band.",
+    "target_document": "SPF Banding 2026-2027",
+    "department": "CSD",
+    "role": "employee",
+    "keywords": ["permissions", "extracurricular", "activities"]
+  },
+  {
+    "id": "eval_006",
+    "question": "Which students are eligible for external internships according to the Internship SOP?",
+    "expected_answer": "Students from 3rd Year 2nd Semester and Final Year are eligible for external internships.",
+    "target_document": "SOP for students internship documents",
+    "department": "CSD",
+    "role": "employee",
+    "keywords": ["3rd Year 2nd Sem", "Final Year", "eligible"]
+  },
+  {
+    "id": "eval_007",
+    "question": "Can 2nd year students do internships under the Internship SOP?",
+    "expected_answer": "Students from 2nd Year 1st Sem & 2nd Sem are eligible only for in-house internships (Live Projects) and must report daily to class teacher.",
+    "target_document": "SOP for students internship documents",
+    "department": "CSD",
+    "role": "employee",
+    "keywords": ["inhouse", "in-house", "Live Projects", "2nd Year"]
+  },
+  {
+    "id": "eval_008",
+    "question": "Within how many days must a medical leave request be submitted after returning?",
+    "expected_answer": "The student must submit the request within 5 working days of resuming college.",
+    "target_document": "Process of Attendance request on Medical grounds",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["5 working days", "5 days", "resuming"]
+  },
+  {
+    "id": "eval_009",
+    "question": "Who must issue the medical certificate for attendance condonation on medical grounds?",
+    "expected_answer": "A registered medical practitioner (MBBS/MD) or an authorized hospital/clinic.",
+    "target_document": "Process of Attendance request on Medical grounds",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["registered medical practitioner", "MBBS", "MD", "hospital"]
+  },
+  {
+    "id": "eval_010",
+    "question": "What office reviews and verifies student medical leave applications?",
+    "expected_answer": "The Program Office verifies the leave request along with the Medical Officer.",
+    "target_document": "Process of Attendance request on Medical grounds",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["Program Office", "Medical officer", "Academic committee"]
+  },
+  {
+    "id": "eval_011",
+    "question": "How many days in advance must students in Band A and B submit attendance permission before an activity?",
+    "expected_answer": "At least 2 working days before the start date of the activity.",
+    "target_document": "Attendance Permission (for students in band A and B) (1)",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["2 working days", "Head of Operations", "Program Office"]
+  },
+  {
+    "id": "eval_012",
+    "question": "Who must endorse the attendance permission form for students in Band C and D?",
+    "expected_answer": "Faculty or staff must endorse with reasons and explain how they will support the student academically, with comments from the Principal.",
+    "target_document": "Attendance  permission (for students in band C and D) (1)",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["Staff Endorsing", "Faculty", "Principal", "academics"]
+  },
+  {
+    "id": "eval_013",
+    "question": "What is the dress code policy requirement on campus?",
+    "expected_answer": "Formal/semi-formal institutional dress code guidelines must be adhered to on campus premises.",
+    "target_document": "Circular -Dress Code",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["dress code", "campus", "formal", "attire"]
+  },
+  {
+    "id": "eval_014",
+    "question": "Is a driving license required for students bringing two-wheelers or vehicles to college?",
+    "expected_answer": "Yes, students must hold a valid driving license to bring motor vehicles into the campus premises.",
+    "target_document": "Circular - Student Driving License (1)",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["driving license", "valid", "vehicle", "campus"]
+  },
+  {
+    "id": "eval_015",
+    "question": "What information must be included in a doctor's medical certificate for medical leave?",
+    "expected_answer": "Diagnosis, treatment dates, doctor's signature and medical registration number.",
+    "target_document": "Process of Attendance request on Medical grounds",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["diagnosis", "treatment dates", "signature", "registration number"]
+  },
+  {
+    "id": "eval_016",
+    "question": "What is the purpose of the CDC Band Classification Policy?",
+    "expected_answer": "To establish a standardized system for assessing student placement readiness through periodic testing, CDC Score calculation, and band classification.",
+    "target_document": "CDC Band classification policy",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["placement readiness", "CDC Score", "periodic testing"]
+  },
+  {
+    "id": "eval_017",
+    "question": "What are the test components for aptitude and reasoning in CDC evaluation for first and second year students?",
+    "expected_answer": "Weekly practice tests on Aptitude and Reasoning skills, and post assessments on training tracks.",
+    "target_document": "CDC Band classification policy",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["Aptitude and Reasoning", "weekly practice tests", "post assessments"]
+  },
+  {
+    "id": "eval_018",
+    "question": "When are company specific assessments introduced in CDC training?",
+    "expected_answer": "A few Company Specific Assessments are given in III-II, and primarily to IV-I and IV-II students.",
+    "target_document": "CDC Band classification policy",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["Company Specific Assessments", "III-II", "IV-I"]
+  },
+  {
+    "id": "eval_019",
+    "question": "What is the role of parent confirmation in student medical leave verification?",
+    "expected_answer": "The program office verifies that the parent has confirmed ward's absence on medical grounds.",
+    "target_document": "Template Medical leave application- Student",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["parent has confirmed", "medical grounds", "absence"]
+  },
+  {
+    "id": "eval_020",
+    "question": "Who finally reviews and approves student attendance requests on medical grounds?",
+    "expected_answer": "The Academic Committee reviews and grants final approval after Program Office verification.",
+    "target_document": "Process of Attendance request on Medical grounds",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["Academic committee", "Program Office", "Approval"]
+  },
+  {
+    "id": "eval_021",
+    "question": "What is the scope of the Internship SOP at HITAM?",
+    "expected_answer": "Applies to all undergraduate students pursuing on-campus, off-campus, industry collaboration, MoU-based, or CDC-facilitated internships.",
+    "target_document": "SOP for students internship documents",
+    "department": "CSD",
+    "role": "employee",
+    "keywords": ["undergraduate", "on-campus", "off-campus", "MoU", "CDC"]
+  },
+  {
+    "id": "eval_022",
+    "question": "What approval is needed for flight bookings exceeding 500 dollars under the expense policy?",
+    "expected_answer": "Flight bookings above 500 dollars require director approval.",
+    "target_document": "Expense Policy",
+    "department": "Operations",
+    "role": "admin",
+    "keywords": ["director approval", "500 dollars", "flight bookings"]
+  },
+  {
+    "id": "eval_023",
+    "question": "How many days of remote work are allowed per week under the remote work policy?",
+    "expected_answer": "Up to 3 days remote work per week is permitted.",
+    "target_document": "Remote Work Policy",
+    "department": "Operations",
+    "role": "admin",
+    "keywords": ["3 days", "remote work", "per week"]
+  },
+  {
+    "id": "eval_024",
+    "question": "What was the quarterly compliance percentage in the confidential audit report?",
+    "expected_answer": "Quarterly Compliance was 100% audited by Ernst and Young.",
+    "target_document": "Audit Report Scanned",
+    "department": "Operations",
+    "role": "admin",
+    "keywords": ["100%", "Ernst and Young", "Compliance"]
+  },
+  {
+    "id": "eval_025",
+    "question": "Where should the Band A and B activity permission form be submitted?",
+    "expected_answer": "To the Head of Operations, Program Office.",
+    "target_document": "Attendance Permission (for students in band A and B) (1)",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["Head of Operations", "Program Office"]
+  },
+  {
+    "id": "eval_026",
+    "question": "Why does HITAM balance academics with co-curricular and extracurricular activities in SPF?",
+    "expected_answer": "For holistic development of students as part of their learning process.",
+    "target_document": "SPF Banding 2026-2027",
+    "department": "CSD",
+    "role": "employee",
+    "keywords": ["holistic development", "balance", "learning process"]
+  },
+  {
+    "id": "eval_027",
+    "question": "What must be attached with the student medical leave application form?",
+    "expected_answer": "Medical Certificate with diagnosis and hospital report if applicable.",
+    "target_document": "Template Medical leave application- Student",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["Medical Certificate", "diagnosis", "Hospital report"]
+  },
+  {
+    "id": "eval_028",
+    "question": "What is the consequence of not holding a driving license when driving to the college?",
+    "expected_answer": "Students are prohibited from bringing vehicles inside campus premises without a valid license.",
+    "target_document": "Circular - Student Driving License (1)",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["driving license", "campus", "vehicles", "prohibited"]
+  },
+  {
+    "id": "eval_029",
+    "question": "What training tracks are evaluated during II-I and II-II for CDC score?",
+    "expected_answer": "Technical Skills plus Aptitude and Reasoning Skills.",
+    "target_document": "CDC Band classification policy",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["Technical Skills", "Aptitude and Reasoning", "training tracks"]
+  },
+  {
+    "id": "eval_030",
+    "question": "What happens if a student submits a medical leave application after 5 working days?",
+    "expected_answer": "Medical leave requests must be submitted within 5 working days; late requests are subject to rejection by the committee.",
+    "target_document": "Process of Attendance request on Medical grounds",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["5 working days", "submission", "medical leave"]
+  },
+  {
+    "id": "eval_031",
+    "question": "Who are the external organizations eligible for student internships under the SOP?",
+    "expected_answer": "Industry collaborations, MoU-based organizations, and CDC-facilitated opportunities.",
+    "target_document": "SOP for students internship documents",
+    "department": "CSD",
+    "role": "employee",
+    "keywords": ["MoU-based", "Industry collaborations", "CDC-facilitated"]
+  },
+  {
+    "id": "eval_032",
+    "question": "What details about the activity must be provided in the Band A/B attendance permission form?",
+    "expected_answer": "Name of the activity, from and to dates, total number of days, and additional time required.",
+    "target_document": "Attendance Permission (for students in band A and B) (1)",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["Name of the Activity", "Activity Date", "Total Number of Days"]
+  },
+  {
+    "id": "eval_033",
+    "question": "Can Band D students participate in off-campus events without faculty endorsement?",
+    "expected_answer": "No, Band C and D students require faculty/staff endorsement explaining the academic support plan and Principal approval.",
+    "target_document": "Attendance  permission (for students in band C and D) (1)",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["endorsement", "Faculty", "support", "Principal"]
+  },
+  {
+    "id": "eval_034",
+    "question": "How are students provided personalized attention under the SPF framework?",
+    "expected_answer": "By classifying them into four bands (A, B, C, D) to offer tailored guidance and permissions.",
+    "target_document": "SPF Banding 2026-2027",
+    "department": "CSD",
+    "role": "employee",
+    "keywords": ["four bands", "personalized attention", "guidance", "permissions"]
+  },
+  {
+    "id": "eval_035",
+    "question": "What is the minimum overall attendance required under the institutional attendance policy?",
+    "expected_answer": "A minimum of 75% attendance is required, with condonation possible down to 65% on valid medical grounds.",
+    "target_document": "Attendance policy V.22 (1) (2)",
+    "department": "Operations",
+    "role": "employee",
+    "keywords": ["75%", "65%", "condonation", "minimum attendance"]
+  }
+]
