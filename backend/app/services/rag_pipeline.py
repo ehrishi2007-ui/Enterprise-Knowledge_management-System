@@ -3,7 +3,7 @@
 import re
 import time
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
@@ -19,15 +19,26 @@ Use ONLY the provided context documents to answer the user's question accurately
 If the context does not contain sufficient information to answer, say "I don't have enough information to answer that based on the provided documents."
 Do not extrapolate or use outside knowledge.
 Always cite your sources using the format [Document Name, Page X] when referencing facts.
-Keep your answers clear, structured, and professional."""
+Keep your answers clear, concise, structured, and professional. Avoid unnecessary wordiness."""
 
 class RAGPipeline:
-    def get_ai_settings(self, supabase_client) -> Dict[str, Any]:
-        """Fetch AI settings from Supabase settings table or use defaults."""
+    def __init__(self):
+        self._cached_ai_settings: Optional[Dict[str, Any]] = None
+        self._settings_cache_time: float = 0.0
+        self._settings_ttl: float = 300.0  # Cache settings for 5 minutes to avoid DB round-trips
+        self._query_cache: Dict[str, Dict[str, Any]] = {}
+        self._max_cache_size: int = 200
+
+    def get_ai_settings(self, supabase_client, force_refresh: bool = False) -> Dict[str, Any]:
+        """Fetch AI settings with in-memory caching to eliminate per-request DB round-trips."""
+        now = time.time()
+        if not force_refresh and self._cached_ai_settings and (now - self._settings_cache_time < self._settings_ttl):
+            return dict(self._cached_ai_settings)
+
         ai_settings = {
             "system_prompt": DEFAULT_SYSTEM_PROMPT,
             "temperature": settings.DEFAULT_TEMPERATURE,
-            "max_tokens": 4096,
+            "max_tokens": 1024,
             "top_k": settings.TOP_K_RESULTS,
             "model_name": settings.GEMINI_MODEL
         }
@@ -40,15 +51,17 @@ class RAGPipeline:
                 if "temperature" in settings_map and settings_map["temperature"]:
                     ai_settings["temperature"] = float(settings_map["temperature"])
                 if "max_tokens" in settings_map and settings_map["max_tokens"]:
-                    ai_settings["max_tokens"] = max(int(settings_map["max_tokens"]), 4096)
+                    ai_settings["max_tokens"] = min(int(settings_map["max_tokens"]), 2048)
                 if "top_k" in settings_map and settings_map["top_k"]:
                     ai_settings["top_k"] = int(settings_map["top_k"])
                 if "model_name" in settings_map and settings_map["model_name"]:
                     ai_settings["model_name"] = settings_map["model_name"]
+
+            self._cached_ai_settings = dict(ai_settings)
+            self._settings_cache_time = now
         except Exception as e:
             logger.warning(f"Could not fetch AI settings from database, using defaults: {e}")
-            
-        ai_settings["max_tokens"] = max(ai_settings.get("max_tokens", 4096), 4096)
+
         return ai_settings
 
     def format_context(self, docs) -> str:
@@ -71,9 +84,16 @@ class RAGPipeline:
         supabase_client,
         user_role: str = "employee"
     ) -> Dict[str, Any]:
-        """Execute the LangChain RAG pipeline."""
+        """Execute the LangChain RAG pipeline with latency caching."""
         start_time = time.time()
-        
+        cache_key = f"{user_role}:{user_department}:{question.strip().lower()}"
+        if not conversation_history and cache_key in self._query_cache:
+            cached_result = dict(self._query_cache[cache_key])
+            cached_result["response_time_ms"] = int((time.time() - start_time) * 1000)
+            cached_result["is_cached"] = True
+            logger.info(f"Cache HIT for query: '{question}' in {cached_result['response_time_ms']}ms")
+            return cached_result
+
         try:
             # 1. Fetch AI & RAG settings
             ai_settings = self.get_ai_settings(supabase_client)
@@ -236,18 +256,23 @@ class RAGPipeline:
                 
             response_time_ms = int((time.time() - start_time) * 1000)
             logger.info(f"LangChain RAG pipeline finished in {response_time_ms}ms with {len(sources)} sources.")
-            
-            return {
+
+            result_payload = {
                 "answer": answer_text,
                 "sources": sources,
                 "response_time_ms": response_time_ms,
-                # Internal data consumed by chat.py to fire the background metrics task.
-                # Prefixed with _ to signal it is not part of the public API response.
                 "_metrics_data": {
                     "candidate_docs_with_scores": candidate_docs_with_scores,
                     "retrieved_docs_with_scores": retrieved_docs_with_scores,
                 },
             }
+
+            if not conversation_history:
+                if len(self._query_cache) >= self._max_cache_size:
+                    self._query_cache.pop(next(iter(self._query_cache)))
+                self._query_cache[cache_key] = result_payload
+
+            return result_payload
             
         except Exception as e:
             logger.error(f"Error in LangChain RAG pipeline: {e}", exc_info=True)
