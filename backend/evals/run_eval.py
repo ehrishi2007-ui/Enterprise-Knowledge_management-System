@@ -195,7 +195,8 @@ def run_evaluation(
 if __name__ == "__main__":
     base_eval_dir = Path(__file__).resolve().parent
     dataset_file = base_eval_dir / "golden_set.json"
-    results_file = base_eval_dir / "results" / "baseline.json"
+    output_filename = sys.argv[1] if len(sys.argv) > 1 else "baseline.json"
+    results_file = base_eval_dir / "results" / output_filename
     
     run_evaluation(
         dataset_path=dataset_file,

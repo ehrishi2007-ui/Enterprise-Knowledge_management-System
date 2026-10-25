@@ -1,10 +1,12 @@
 """ChromaDB service for vector operations using LangChain Chroma vectorstore.
 
+Includes Hybrid Search combining Dense vector cosine similarity and BM25 sparse keyword matching.
 RAG FIX: Uses absolute path for PersistentClient fallback to prevent
 path resolution issues when uvicorn is started from different directories."""
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -18,6 +20,11 @@ try:
 except ImportError:
     from langchain_community.vectorstores import Chroma
 
+try:
+    from rank_bm25 import BM25Okapi
+except ImportError:
+    BM25Okapi = None
+
 from app.config import settings
 from app.services.embedding_service import embedding_service
 
@@ -28,6 +35,9 @@ class ChromaService:
         self.client = None
         self.collection_name = 'ekms_documents'
         self.vectorstore: Optional[Chroma] = None
+        self._bm25_index: Optional[Any] = None
+        self._bm25_docs: List[Document] = []
+        self._bm25_dirty: bool = True
         self._initialize_client()
         
     def _initialize_client(self):
@@ -84,6 +94,48 @@ class ChromaService:
             return self.vectorstore._collection
         return None
 
+    def _tokenize(self, text: str) -> List[str]:
+        """Simple, fast tokenization for BM25 matching."""
+        return re.findall(r'\w+', text.lower())
+
+    def _ensure_bm25_index(self):
+        """Build or refresh in-memory BM25 index from Chroma collection."""
+        if not self._bm25_dirty and self._bm25_index is not None:
+            return
+
+        if BM25Okapi is None:
+            logger.warning("rank_bm25 is not installed. Hybrid search will fall back to dense search.")
+            return
+
+        self._ensure_initialized()
+        if not self.collection:
+            return
+
+        try:
+            raw = self.collection.get(include=['metadatas', 'documents'])
+            docs = []
+            corpus_tokens = []
+            documents = raw.get('documents', []) or []
+            metadatas = raw.get('metadatas', []) or []
+
+            for i in range(len(documents)):
+                meta = metadatas[i] if i < len(metadatas) else {}
+                doc = Document(page_content=documents[i], metadata=meta)
+                docs.append(doc)
+                corpus_tokens.append(self._tokenize(documents[i]))
+
+            if corpus_tokens:
+                self._bm25_index = BM25Okapi(corpus_tokens)
+                self._bm25_docs = docs
+                self._bm25_dirty = False
+                logger.info(f"BM25 index initialized with {len(docs)} document chunks.")
+            else:
+                self._bm25_index = None
+                self._bm25_docs = []
+                self._bm25_dirty = False
+        except Exception as e:
+            logger.error(f"Error building BM25 index: {e}", exc_info=True)
+
     def add_documents(self, documents: List[Document], ids: Optional[List[str]] = None) -> bool:
         self._ensure_initialized()
         if not self.vectorstore:
@@ -102,6 +154,7 @@ class ChromaService:
                     for i, doc in enumerate(documents)
                 ]
             self.vectorstore.add_documents(documents=documents, ids=ids)
+            self._bm25_dirty = True
             logger.info(f"Added {len(documents)} documents to Chroma.")
             return True
         except Exception as e:
@@ -128,6 +181,77 @@ class ChromaService:
             logger.error(f"Error in similarity_search_with_scores: {e}")
             return []
 
+    def similarity_search_hybrid_with_relevance_scores(
+        self,
+        query: str,
+        k: int = 5,
+        filter: Optional[Dict[str, Any]] = None,
+        alpha: float = 0.65
+    ) -> List[Tuple[Document, float]]:
+        """Hybrid search combining Dense vector cosine similarity and Sparse BM25 keyword matching.
+
+        Args:
+            query: The user query string.
+            k: Top-K candidates to retrieve.
+            filter: Optional ChromaDB metadata filter.
+            alpha: Weight for dense vector search (0.0 to 1.0). (1.0 - alpha) is BM25 weight.
+
+        Returns:
+            List of (Document, score) tuples sorted by hybrid score descending.
+        """
+        # 1. Dense vector search (retrieves more candidates for fusion)
+        dense_candidates = max(k * 2, 25)
+        dense_results = self.similarity_search_with_relevance_scores(query=query, k=dense_candidates, filter=filter)
+
+        # 2. Sparse BM25 keyword search
+        try:
+            self._ensure_bm25_index()
+        except Exception as e:
+            logger.warning(f"Could not build BM25 index: {e}")
+
+        if not self._bm25_index or not self._bm25_docs:
+            return dense_results[:k]
+
+        q_tokens = self._tokenize(query)
+        if not q_tokens:
+            return dense_results[:k]
+
+        try:
+            bm25_scores = self._bm25_index.get_scores(q_tokens)
+            max_bm25 = max(bm25_scores) if len(bm25_scores) > 0 and max(bm25_scores) > 0 else 1.0
+
+            dense_map: Dict[str, Tuple[Document, float]] = {}
+            for d, s in dense_results:
+                doc_id = d.metadata.get("document_id", "doc")
+                chunk_idx = d.metadata.get("chunk_index", 0)
+                dense_map[f"{doc_id}_{chunk_idx}"] = (d, s)
+
+            combined: Dict[str, Tuple[Document, float]] = {}
+            for i, d in enumerate(self._bm25_docs):
+                doc_id = d.metadata.get("document_id", "doc")
+                chunk_idx = d.metadata.get("chunk_index", 0)
+                key = f"{doc_id}_{chunk_idx}"
+
+                norm_bm25 = bm25_scores[i] / max_bm25 if max_bm25 > 0 else 0.0
+
+                if key in dense_map:
+                    dense_score = dense_map[key][1]
+                    doc_obj = dense_map[key][0]
+                else:
+                    dense_score = 0.30
+                    doc_obj = d
+
+                # Include if returned by dense search or has meaningful keyword match
+                if key in dense_map or norm_bm25 > 0.15:
+                    comb_score = alpha * dense_score + (1.0 - alpha) * norm_bm25
+                    combined[key] = (doc_obj, round(comb_score, 4))
+
+            sorted_candidates = sorted(combined.values(), key=lambda x: x[1], reverse=True)
+            return sorted_candidates[:k]
+        except Exception as e:
+            logger.error(f"Error during hybrid fusion: {e}", exc_info=True)
+            return dense_results[:k]
+
     def as_retriever(self, k: int = 5, search_filter: Optional[Dict[str, Any]] = None):
         self._ensure_initialized()
         if not self.vectorstore:
@@ -142,6 +266,7 @@ class ChromaService:
             return False
         try:
             self.collection.delete(where={"document_id": document_id})
+            self._bm25_dirty = True
             logger.info(f"Deleted chunks for document {document_id}")
             return True
         except Exception as e:

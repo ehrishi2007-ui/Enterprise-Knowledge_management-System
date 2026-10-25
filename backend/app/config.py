@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     
     # Gemini
     GEMINI_API_KEY: str
-    GEMINI_MODEL: str = "gemini-3.1-flash-lite"
+    GEMINI_MODEL: str = "gemini-flash-lite-latest"
     
     # ChromaDB
     CHROMA_HOST: str = "localhost"

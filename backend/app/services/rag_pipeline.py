@@ -103,10 +103,11 @@ class RAGPipeline:
             target_top_k = int(ai_settings.get("top_k", 5))
             candidate_k = max(target_top_k * 5, 25)
             logger.info(f"Retrieving top {candidate_k} candidates for user_role '{user_role}', user_dept '{user_department}' with model {ai_settings['model_name']} for question: '{question}'")
-            # Use scored search so similarity scores are available for IR metrics
-            candidate_docs_with_scores = chroma_service.similarity_search_with_relevance_scores(
+            # Use hybrid scored search (Dense + BM25) so similarity scores are available for IR metrics
+            candidate_docs_with_scores = chroma_service.similarity_search_hybrid_with_relevance_scores(
                 query=question,
-                k=candidate_k
+                k=candidate_k,
+                alpha=0.65
             )
             
             # 3. Apply RBAC (Department + Role) filtering in Python & cross-document deduplication
@@ -204,10 +205,10 @@ class RAGPipeline:
                 ("human", "{question}")
             ])
 
-            # 7. Model fallback list with rapid failover (max_retries=1, timeout=15s)
+            # 7. Model fallback list with rapid failover (max_retries=1, timeout=10s)
             primary_model = ai_settings.get("model_name") or settings.GEMINI_MODEL
             candidate_models = [primary_model]
-            for fb in ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash"]:
+            for fb in ["gemini-flash-lite-latest", "gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"]:
                 if fb not in candidate_models:
                     candidate_models.append(fb)
 
@@ -223,7 +224,7 @@ class RAGPipeline:
                         temperature=ai_settings["temperature"],
                         max_tokens=ai_settings["max_tokens"],
                         max_retries=1,
-                        timeout=15.0
+                        timeout=10.0
                     )
                     chain = prompt_template | llm
                     response = chain.invoke({

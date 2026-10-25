@@ -21,14 +21,23 @@ class EmbeddingService:
         if self._embeddings is None:
             logger.info(f"Initializing HuggingFaceEmbeddings with {self.model_name}...")
             try:
+                # Fast path: use local files to prevent offline timeouts / retries
                 self._embeddings = HuggingFaceEmbeddings(
                     model_name=self.model_name,
-                    encode_kwargs={"normalize_embeddings": True}
+                    encode_kwargs={"normalize_embeddings": True},
+                    model_kwargs={"local_files_only": True}
                 )
-                logger.info("HuggingFaceEmbeddings initialized successfully.")
-            except Exception as e:
-                logger.error(f"Failed to initialize embeddings: {e}")
-                raise
+                logger.info("HuggingFaceEmbeddings initialized successfully (local cache).")
+            except Exception:
+                try:
+                    self._embeddings = HuggingFaceEmbeddings(
+                        model_name=self.model_name,
+                        encode_kwargs={"normalize_embeddings": True}
+                    )
+                    logger.info("HuggingFaceEmbeddings initialized successfully.")
+                except Exception as e:
+                    logger.error(f"Failed to initialize embeddings: {e}")
+                    raise
         return self._embeddings
 
     def load_model(self):
