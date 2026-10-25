@@ -100,8 +100,8 @@ class RAGPipeline:
             
             # 2. Retrieve relevant candidates using LangChain Chroma (with scores for metrics)
             # Retrieve enough candidates to apply accurate permission filtering & deduplication
-            target_top_k = max(ai_settings.get("top_k", 8), 8)
-            candidate_k = max(target_top_k * 4, 30)
+            target_top_k = int(ai_settings.get("top_k", 5))
+            candidate_k = max(target_top_k * 5, 25)
             logger.info(f"Retrieving top {candidate_k} candidates for user_role '{user_role}', user_dept '{user_department}' with model {ai_settings['model_name']} for question: '{question}'")
             # Use scored search so similarity scores are available for IR metrics
             candidate_docs_with_scores = chroma_service.similarity_search_with_relevance_scores(
@@ -144,6 +144,10 @@ class RAGPipeline:
                     )
                 
                 if not is_dept_permitted:
+                    continue
+
+                # Relevance score threshold: reject trailing low-relevance noise chunks (score < 0.48)
+                if score < 0.48 and len(retrieved_docs) >= 1:
                     continue
 
                 # Cross-document deduplication (prevents duplicate documents from monopolizing top-k)
