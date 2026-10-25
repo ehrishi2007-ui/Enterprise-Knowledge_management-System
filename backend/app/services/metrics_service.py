@@ -250,7 +250,15 @@ def compute_and_save(
             "had_error":             had_error,
         }
 
-        supabase_client.table("metrics_log").insert(row).execute()
+        try:
+            supabase_client.table("metrics_log").insert(row).execute()
+        except Exception as insert_err:
+            if "violates foreign key constraint" in str(insert_err) and row.get("user_id"):
+                logger.warning(f"[Metrics] Foreign key violation on user_id, retrying with user_id=None: {insert_err}")
+                row["user_id"] = None
+                supabase_client.table("metrics_log").insert(row).execute()
+            else:
+                raise insert_err
         logger.info(
             f"[Metrics] Saved | msg={message_id} | "
             f"P@K={ir['precision_at_k']:.2f} R@K={ir['recall_at_k']:.2f} "
